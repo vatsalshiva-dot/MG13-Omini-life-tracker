@@ -173,4 +173,5 @@ export interface AppState {
   muteGhostAlerts?: boolean;
   neonTheme?: string;
   bgTheme?: string;
+  hideGuideFloater?: boolean;
 }

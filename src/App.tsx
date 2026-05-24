@@ -1,18 +1,34 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  AppState, TrackerCategory, DayEntry, Reminder, JournalEntry, JournalPrompt, SyncConfig, PomoSession, TrackerStatus 
-} from './types';
-import { 
-  loadData, saveData, loadSyncCfg, saveSyncCfg, defData, CATS,
-  syncGist, pullGist, syncJSONBin, pullJSONBin 
-} from './utils/storage';
-import { todayStr, periodRange } from './utils/date';
+import React, { useState, useEffect } from "react";
+import {
+  AppState,
+  TrackerCategory,
+  DayEntry,
+  Reminder,
+  JournalEntry,
+  JournalPrompt,
+  SyncConfig,
+  PomoSession,
+  TrackerStatus,
+} from "./types";
+import {
+  loadData,
+  saveData,
+  loadSyncCfg,
+  saveSyncCfg,
+  defData,
+  CATS,
+  syncGist,
+  pullGist,
+  syncJSONBin,
+  pullJSONBin,
+} from "./utils/storage";
+import { todayStr, periodRange } from "./utils/date";
 
 const getThemeCSS = (colorHex?: string, bgTheme?: string) => {
-  let cssStr = '';
+  let cssStr = "";
 
-  if (colorHex && colorHex !== '#ff6b1a') {
-    const hex = colorHex.replace('#', '');
+  if (colorHex && colorHex !== "#ff6b1a") {
+    const hex = colorHex.replace("#", "");
     const r = parseInt(hex.substring(0, 2), 16);
     const g = parseInt(hex.substring(2, 4), 16);
     const b = parseInt(hex.substring(4, 6), 16);
@@ -42,18 +58,131 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string) => {
     `;
   }
 
-  if (bgTheme && bgTheme !== 'midnight') {
-    let bg0 = '#0d0d1a'; // Dashboard BG
-    let bg1 = '#111120'; // Card BG
-    
-    if (bgTheme === 'abyssal') { bg0 = '#000000'; bg1 = '#09090b'; }
-    if (bgTheme === 'hacker') { bg0 = '#020a02'; bg1 = '#051205'; }
-    if (bgTheme === 'cyber') { bg0 = '#020010'; bg1 = '#0a0020'; }
-    if (bgTheme === 'crimson') { bg0 = '#0f0003'; bg1 = '#1a0005'; }
+  if (bgTheme && bgTheme !== "midnight") {
+    let bg0 = "#0d0d1a"; // Dashboard BG
+    let bg1 = "#111120"; // Card BG
+    let extraCss = "";
+
+    // Shared overrides for light themes
+    const lightModeOverride = `
+      .text-slate-100, .text-white { color: #0f172a !important; }
+      .text-slate-200 { color: #1e293b !important; }
+      .text-slate-300 { color: #334155 !important; }
+      .text-slate-400 { color: #475569 !important; }
+      .text-slate-500 { color: #64748b !important; }
+      .border-\\[\\#2a2a50\\] { border-color: #cbd5e1 !important; }
+      .border-\\[\\#111120\\] { border-color: #e2e8f0 !important; }
+      .bg-\\[\\#111120\\] { background-color: #ffffff !important; }
+      .bg-\\[\\#0a0a14\\] { background-color: #f1f5f9 !important; }
+      .bg-\\[\\#2a2a50\\] { background-color: #cbd5e1 !important; }
+      .bg-\\[\\#2a2a50\\]\\/50 { background-color: rgba(203, 213, 225, 0.5) !important; }
+      body { color: #0f172a !important; }
+      .text-\\[10px\\] { font-size: 0.75rem !important; }
+      .text-xs { font-size: 0.85rem !important; line-height: 1.25rem !important; }
+      .text-sm { font-size: 1rem !important; line-height: 1.5rem !important; }
+      .text-base { font-size: 1.15rem !important; line-height: 1.75rem !important; }
+      .text-lg { font-size: 1.25rem !important; line-height: 1.75rem !important; }
+      .text-xl { font-size: 1.5rem !important; }
+      .text-2xl { font-size: 1.8rem !important; }
+    `;
+
+    if (bgTheme === "minimal") {
+      bg0 = "#f8fafc";
+      bg1 = "#ffffff";
+      extraCss =
+        lightModeOverride +
+        `
+          body {
+            --font-display: "Inter", sans-serif;
+            --font-mono: "Inter", sans-serif;
+          }
+          .font-sans, .font-display, .font-mono { font-family: "Inter", sans-serif !important; }
+          .rounded-2xl { border-radius: 12px !important; }
+          .rounded-xl { border-radius: 10px !important; }
+          .rounded-lg, .rounded { border-radius: 8px !important; }
+          .border-\\[\\#2a2a50\\] { border-color: #e2e8f0 !important; }
+          .bg-\\[\\#111120\\] { box-shadow: 0 4px 20px rgba(0,0,0,0.03) !important; border-color: transparent !important; }
+        `;
+    }
+    if (bgTheme === "retro") {
+      bg0 = "#fffbe6";
+      bg1 = "#ffffff";
+      extraCss =
+        lightModeOverride +
+        `
+          body {
+            --font-sans: "Space Grotesk", sans-serif;
+            --font-display: "Space Grotesk", sans-serif;
+            --font-mono: "VT323", monospace;
+          }
+          .font-sans, .font-display { font-family: var(--font-sans) !important; font-weight: 700 !important; }
+          .font-mono { font-family: var(--font-mono) !important; font-size: 1.1rem !important; }
+          .rounded-2xl, .rounded-xl, .rounded-lg, .rounded { border-radius: 0 !important; }
+          .border-\\[\\#2a2a50\\] { border-color: #000000 !important; border-width: 2px !important; }
+          .border-\\[\\#111120\\] { border-color: #000000 !important; border-width: 2px !important; }
+          .bg-\\[\\#111120\\] { 
+            background-color: #ffffff !important; 
+            box-shadow: 4px 4px 0px 0px #000000 !important; 
+            border: 2px solid #000000 !important;
+          }
+          .text-slate-100, .text-white { color: #000000 !important; font-weight: 800 !important; }
+          .text-slate-400 { color: #333333 !important; font-weight: bold !important; }
+        `;
+    }
+    if (bgTheme === "cute") {
+      bg0 = "#fff0f5";
+      bg1 = "#ffffff";
+      extraCss =
+        lightModeOverride +
+        `
+          body {
+            --font-sans: "Quicksand", sans-serif;
+            --font-display: "Quicksand", sans-serif;
+            --font-mono: "Quicksand", sans-serif;
+          }
+          .rounded-2xl { border-radius: 2rem !important; }
+          .rounded-xl { border-radius: 1.5rem !important; }
+          .rounded-lg { border-radius: 1rem !important; }
+          .font-sans, .font-display, .font-mono { font-family: "Quicksand", sans-serif !important; font-weight: 600 !important; }
+          .bg-\\[\\#111120\\] { 
+            background-color: #ffffff !important; 
+            box-shadow: 0 8px 24px rgba(255, 182, 193, 0.2) !important; 
+            border-color: #ffe4e1 !important;
+            border-width: 2px !important;
+          }
+          .text-slate-100 { color: #5a4b5e !important; }
+          .text-slate-400 { color: #88788c !important; }
+        `;
+    }
+    if (bgTheme === "playful") {
+      bg0 = "#e0f2fe";
+      bg1 = "#ffffff";
+      extraCss =
+        lightModeOverride +
+        `
+          body {
+            --font-sans: "Space Grotesk", sans-serif;
+            --font-display: "Space Grotesk", sans-serif;
+            --font-mono: "Space Grotesk", sans-serif;
+          }
+          .font-sans, .font-display, .font-mono { font-family: "Space Grotesk", sans-serif !important; }
+          .rounded-2xl { border-radius: 16px !important; }
+          .bg-\\[\\#111120\\] { 
+            background-color: #ffffff !important; 
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.15) !important;
+            border-color: #bae6fd !important;
+            border-width: 2px !important;
+          }
+          .text-slate-100 { color: #0284c7 !important; font-weight: 800 !important; }
+          .text-slate-300 { color: #0ea5e9 !important; }
+          .text-slate-400 { color: #38bdf8 !important; font-weight: bold !important; }
+        `;
+    }
 
     cssStr += `
       .bg-\\[\\#0d0d1a\\] { background-color: ${bg0} !important; }
       .bg-\\[\\#111120\\] { background-color: ${bg1} !important; }
+      ${extraCss}
     `;
   }
 
@@ -61,33 +190,43 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string) => {
 };
 
 // Views
-import { Sidebar } from './components/Sidebar';
-import { DashboardView } from './components/DashboardView';
-import { DailyTrackerView } from './components/DailyTrackerView';
-import { GoalsView } from './components/GoalsView';
-import { AnalyticsView } from './components/AnalyticsView';
-import { CalendarView } from './components/CalendarView';
-import { RemindersView } from './components/RemindersView';
-import { JournalView } from './components/JournalView';
-import { PomoView } from './components/PomoView';
-import { SynopsisView } from './components/SynopsisView';
-import { SearchView } from './components/SearchView';
-import { SettingsView } from './components/SettingsView';
-import { HelpView } from './components/HelpView';
-import { DEMO_STATE } from './utils/demoData';
-import { ExpeditionsView } from './components/ExpeditionsView';
-import { FinancesView } from './components/FinancesView';
-import { SketchpadView } from './components/SketchpadView';
-import { AlertsView } from './components/AlertsView';
-import { AiAnalystView } from './components/AiAnalystView';
-import { FocusAudioView } from './components/FocusAudioWidget';
-import { OnboardingModal } from './components/OnboardingModal';
+import { StepByStepGuideModal } from "./components/StepByStepGuideModal";
+import { GuidesView } from "./components/GuidesView";
+import { Sidebar } from "./components/Sidebar";
+import { DashboardView } from "./components/DashboardView";
+import { DailyTrackerView } from "./components/DailyTrackerView";
+import { GoalsView } from "./components/GoalsView";
+import { AnalyticsView } from "./components/AnalyticsView";
+import { CalendarView } from "./components/CalendarView";
+import { RemindersView } from "./components/RemindersView";
+import { JournalView } from "./components/JournalView";
+import { PomoView } from "./components/PomoView";
+import { SynopsisView } from "./components/SynopsisView";
+import { SearchView } from "./components/SearchView";
+import { SettingsView } from "./components/SettingsView";
+import { HelpView } from "./components/HelpView";
+import { DEMO_STATE } from "./utils/demoData";
+import { ExpeditionsView } from "./components/ExpeditionsView";
+import { FinancesView } from "./components/FinancesView";
+import { SketchpadView } from "./components/SketchpadView";
+import { AlertsView } from "./components/AlertsView";
+import { AiAnalystView } from "./components/AiAnalystView";
+import { FocusAudioView } from "./components/FocusAudioWidget";
+import { OnboardingModal } from "./components/OnboardingModal";
 
-import { 
-  AlertCircle, CheckCircle2, RotateCcw, X, PlusCircle, Check, Bot, ClipboardCopy
-} from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  RotateCcw,
+  X,
+  PlusCircle,
+  Check,
+  Bot,
+  ClipboardCopy,
+  Info,
+} from "lucide-react";
 
-import { getFileHandle } from './utils/ghost';
+import { getFileHandle } from "./utils/ghost";
 
 const GhostAlert = ({ muted }: { muted?: boolean }) => {
   const [showAlert, setShowAlert] = useState(false);
@@ -114,19 +253,39 @@ const GhostAlert = ({ muted }: { muted?: boolean }) => {
 
   return (
     <div className="fixed top-24 right-4 z-[60] animate-fade-in pointer-events-auto">
-       <div className="bg-[#111120] border border-rose-500/50 p-4 rounded-xl shadow-[0_4px_24px_rgba(244,63,94,0.2)] flex flex-col gap-2 w-64 backdrop-blur-md">
-          <div className="flex justify-between items-start">
-              <h4 className="text-[10px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-1.5"><AlertCircle size={14} /> Alert: Offline Mode</h4>
-              <button onClick={() => setShowAlert(false)} className="text-slate-500 hover:text-white transition"><X size={14}/></button>
-          </div>
-          <p className="text-[10px] text-rose-500/80 font-bold">Data is at risk!</p>
-          <p className="text-[9px] text-slate-400 font-medium leading-relaxed">Ghost Sync is off. Please go to Settings and setup Ghost Sync to activate private auto-save to your hard drive.</p>
-       </div>
+      <div className="bg-[#111120] border border-rose-500/50 p-4 rounded-xl shadow-[0_4px_24px_rgba(244,63,94,0.2)] flex flex-col gap-2 w-64 backdrop-blur-md">
+        <div className="flex justify-between items-start">
+          <h4 className="text-[10px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-1.5">
+            <AlertCircle size={14} /> Alert: Offline Mode
+          </h4>
+          <button
+            onClick={() => setShowAlert(false)}
+            className="text-slate-500 hover:text-white transition"
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <p className="text-[10px] text-rose-500/80 font-bold">
+          Data is at risk!
+        </p>
+        <p className="text-[9px] text-slate-400 font-medium leading-relaxed">
+          Ghost Sync is off. Please go to Settings and setup Ghost Sync to
+          activate private auto-save to your hard drive.
+        </p>
+      </div>
     </div>
   );
 };
 
-const ReminderAlert = ({ state, hasSystemAlerts, onNavigate }: { state: AppState, hasSystemAlerts: boolean, onNavigate: (v: string) => void }) => {
+const ReminderAlert = ({
+  state,
+  hasSystemAlerts,
+  onNavigate,
+}: {
+  state: AppState;
+  hasSystemAlerts: boolean;
+  onNavigate: (v: string) => void;
+}) => {
   const [show, setShow] = useState(false);
   const [counts, setCounts] = useState({ user: 0, sys: 0 });
   const [dismissedCount, setDismissedCount] = useState({ alerts: 0, time: 0 });
@@ -135,24 +294,24 @@ const ReminderAlert = ({ state, hasSystemAlerts, onNavigate }: { state: AppState
     const check = () => {
       const today = todayStr();
       const pNow = new Date();
-      
+
       const isDueOrOverdue = (r: any) => {
-        if (r.status === 'done') return false;
+        if (r.status === "done") return false;
         if (r.enableAlert === false) return false;
-        
+
         if (r.dueDate < today) return true;
-        
+
         if (r.dueDate === today) {
           if (!r.time) return true; // All day alerts
-          
+
           const targetTime = new Date();
-          const [h, m] = r.time.split(':').map(Number);
+          const [h, m] = r.time.split(":").map(Number);
           targetTime.setHours(h, m, 0, 0);
-          
+
           if (r.alertOffset) {
-             targetTime.setMinutes(targetTime.getMinutes() - r.alertOffset);
+            targetTime.setMinutes(targetTime.getMinutes() - r.alertOffset);
           }
-          
+
           if (pNow >= targetTime) return true;
         }
         return false;
@@ -161,15 +320,24 @@ const ReminderAlert = ({ state, hasSystemAlerts, onNavigate }: { state: AppState
       const userCount = active.length;
       const sysCount = hasSystemAlerts ? 1 : 0;
       const totalAlerts = userCount + sysCount;
-      
+
       if (totalAlerts > 0) {
-        setCounts(prev => prev.user === userCount && prev.sys === sysCount ? prev : { user: userCount, sys: sysCount });
-        if (totalAlerts !== dismissedCount.alerts || (Date.now() - dismissedCount.time > 60 * 60 * 1000)) {
+        setCounts((prev) =>
+          prev.user === userCount && prev.sys === sysCount
+            ? prev
+            : { user: userCount, sys: sysCount },
+        );
+        if (
+          totalAlerts !== dismissedCount.alerts ||
+          Date.now() - dismissedCount.time > 60 * 60 * 1000
+        ) {
           setShow(true);
         }
       } else {
         setShow(false);
-        setDismissedCount(prev => prev.alerts === 0 && prev.time === 0 ? prev : { alerts: 0, time: 0 });
+        setDismissedCount((prev) =>
+          prev.alerts === 0 && prev.time === 0 ? prev : { alerts: 0, time: 0 },
+        );
       }
     };
     check();
@@ -185,64 +353,78 @@ const ReminderAlert = ({ state, hasSystemAlerts, onNavigate }: { state: AppState
 
   return (
     <div className="fixed bottom-24 right-6 z-[60] animate-bounce pointer-events-auto">
-       <div 
-         className="bg-[#111120] border-2 border-rose-500 p-3 rounded-xl shadow-[0_4px_24px_rgba(244,63,94,0.4)] flex items-center gap-3 transition"
-       >
-         <div onClick={() => onNavigate(isOnlySys ? 'alerts' : 'reminders')} className="flex items-center gap-3 cursor-pointer hover:opacity-80">
-           <div className="w-8 h-8 rounded-full bg-rose-500/20 text-rose-500 flex items-center justify-center">
-             <AlertCircle size={16} />
-           </div>
-           <div>
-             <h4 className="text-xs font-black text-rose-400 uppercase tracking-widest">{isOnlySys ? 'System Alert' : 'Active Reminder'}</h4>
-             <p className="text-[10px] text-slate-300 font-bold">{total} Alert{total > 1 ? 's' : ''} Pending</p>
-           </div>
-         </div>
-         <button 
-           onClick={(e) => { 
-             e.stopPropagation(); 
-             setShow(false); 
-             setDismissedCount({ alerts: total, time: Date.now() }); 
-           }} 
-           className="p-1.5 ml-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 rounded-lg transition"
-           title="Temporarily dismiss popup"
-         >
-            <X size={16} />
-         </button>
-       </div>
+      <div className="bg-[#111120] border-2 border-rose-500 p-3 rounded-xl shadow-[0_4px_24px_rgba(244,63,94,0.4)] flex items-center gap-3 transition">
+        <div
+          onClick={() => onNavigate(isOnlySys ? "alerts" : "reminders")}
+          className="flex items-center gap-3 cursor-pointer hover:opacity-80"
+        >
+          <div className="w-8 h-8 rounded-full bg-rose-500/20 text-rose-500 flex items-center justify-center">
+            <AlertCircle size={16} />
+          </div>
+          <div>
+            <h4 className="text-xs font-black text-rose-400 uppercase tracking-widest">
+              {isOnlySys ? "System Alert" : "Active Reminder"}
+            </h4>
+            <p className="text-[10px] text-slate-300 font-bold">
+              {total} Alert{total > 1 ? "s" : ""} Pending
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShow(false);
+            setDismissedCount({ alerts: total, time: Date.now() });
+          }}
+          className="p-1.5 ml-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 rounded-lg transition"
+          title="Temporarily dismiss popup"
+        >
+          <X size={16} />
+        </button>
+      </div>
     </div>
   );
 };
 
-import { focusAudio } from './utils/audioSystem';
+import { focusAudio } from "./utils/audioSystem";
 
 export default function App() {
-  const [activeView, setActiveView] = useState<string>('dashboard');
-  const [audioTrack, setAudioTrack] = useState('none');
+  const [activeView, setActiveView] = useState<string>("dashboard");
+  const [audioTrack, setAudioTrack] = useState("none");
   const [audioVolume, setAudioVolume] = useState(0.5);
 
   useEffect(() => {
-     focusAudio.start(audioTrack);
-     focusAudio.setVolume(audioVolume);
+    focusAudio.start(audioTrack);
+    focusAudio.setVolume(audioVolume);
   }, [audioTrack]);
 
   useEffect(() => {
-     focusAudio.setVolume(audioVolume);
+    focusAudio.setVolume(audioVolume);
   }, [audioVolume]);
   const [activeDate, setActiveDate] = useState<string>(todayStr());
-  
+
   // Database store
   const [appState, setAppState] = useState<AppState>(defData());
-  
+
   // Cloud sync
   const [syncCfg, setSyncCfg] = useState<SyncConfig>({
-    provider: 'none', gistToken: '', gistId: '', jbKey: '', jbId: '', lastSync: '', lastSyncTs: 0
+    provider: "none",
+    gistToken: "",
+    gistId: "",
+    jbKey: "",
+    jbId: "",
+    lastSync: "",
+    lastSyncTs: 0,
   });
-  const [syncLog, setSyncLog] = useState<string>('');
+  const [syncLog, setSyncLog] = useState<string>("");
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Toast status states
-  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'nfo' } | null>(null);
-  
+  const [toast, setToast] = useState<{
+    msg: string;
+    type: "ok" | "nfo";
+  } | null>(null);
+
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
@@ -253,57 +435,78 @@ export default function App() {
 
   const handleDismissOnboarding = () => {
     setShowOnboarding(false);
-    setAppState(prev => ({
+    setAppState((prev) => ({
       ...prev,
-      onboarding: { ...(prev.onboarding || {}), [activeView]: true }
+      onboarding: { ...(prev.onboarding || {}), [activeView]: true },
     }));
     saveData({
       ...appState,
-      onboarding: { ...(appState.onboarding || {}), [activeView]: true }
+      onboarding: { ...(appState.onboarding || {}), [activeView]: true },
     });
   };
 
   // Pomodoro Shared States
-  const [pomoState, setPomoState] = useState<'idle' | 'work' | 'break'>('idle');
-  const [pomoTimeLeft, setPomoTimeLeft] = useState<string>('25:00');
+  const [pomoState, setPomoState] = useState<"idle" | "work" | "break">("idle");
+  const [pomoTimeLeft, setPomoTimeLeft] = useState<string>("25:00");
   const [pomoPercent, setPomoPercent] = useState<number>(0);
   const [pomoElapsedSeconds, setPomoElapsedSeconds] = useState<number>(0);
   const [pomoTaskName, setPomoTaskName] = useState<string | null>(null);
   const [pomoTaskCat, setPomoTaskCat] = useState<TrackerCategory | null>(null);
   const [pomoWorkMin, setPomoWorkMin] = useState<number>(25);
   const [pomoBrkMin, setPomoBrkMin] = useState<number>(5);
-  const [pomoPreset, setPomoPreset] = useState<string>('classic');
+  const [pomoPreset, setPomoPreset] = useState<string>("classic");
 
   // Recurring Modal Overlay State
   const [recModalOpen, setRecModalOpen] = useState(false);
   const [recCat, setRecCat] = useState<TrackerCategory | null>(null);
   const [recItem, setRecItem] = useState<string | null>(null);
-  const [recFreq, setRecFreq] = useState<'daily' | 'weekdays' | 'weekends' | 'custom'>('daily');
+  const [recFreq, setRecFreq] = useState<
+    "daily" | "weekdays" | "weekends" | "custom"
+  >("daily");
   const [recDays, setRecDays] = useState<number[]>([]);
 
+  // Guide Modal
+  const [guideModalOpen, setGuideModalOpen] = useState(false);
+
   // AI Analyst Modal
-  const [aiModal, setAiModal] = useState<{ isOpen: boolean, promptText: string }>({ isOpen: false, promptText: '' });
+  const [aiModal, setAiModal] = useState<{
+    isOpen: boolean;
+    promptText: string;
+  }>({ isOpen: false, promptText: "" });
 
   const handleOpenAIAnalyst = (customPrompt?: string | React.MouseEvent) => {
-    let finalPrompt = typeof customPrompt === 'string' ? customPrompt : null;
+    let finalPrompt = typeof customPrompt === "string" ? customPrompt : null;
 
     if (!finalPrompt) {
       let focusData: any = {};
-      if (activeView === 'dashboard') focusData = appState;
-      else if (activeView === 'daily') focusData = { daily: appState.daily, goals: appState.goals, pomoSessions: appState.pomoSessions };
-      else if (activeView === 'journal') focusData = { journals: appState.journals, daily: appState.daily };
-      else if (activeView === 'finances') focusData = appState.finances;
-      else if (activeView === 'expeditions') focusData = appState.expeditions;
-      else if (activeView === 'reminders') focusData = appState.reminders;
-      else if (activeView === 'goals') focusData = { goals: appState.goals, daily: appState.daily, pomoSessions: appState.pomoSessions };
-      else if (activeView === 'pomo') focusData = appState.pomoSessions;
+      if (activeView === "dashboard") focusData = appState;
+      else if (activeView === "daily")
+        focusData = {
+          daily: appState.daily,
+          goals: appState.goals,
+          pomoSessions: appState.pomoSessions,
+        };
+      else if (activeView === "journal")
+        focusData = { journals: appState.journals, daily: appState.daily };
+      else if (activeView === "finances") focusData = appState.finances;
+      else if (activeView === "expeditions") focusData = appState.expeditions;
+      else if (activeView === "reminders") focusData = appState.reminders;
+      else if (activeView === "goals")
+        focusData = {
+          goals: appState.goals,
+          daily: appState.daily,
+          pomoSessions: appState.pomoSessions,
+        };
+      else if (activeView === "pomo") focusData = appState.pomoSessions;
       else focusData = appState;
 
       let summaryText = "";
       try {
-        summaryText = JSON.stringify(focusData, null, 2); 
+        summaryText = JSON.stringify(focusData, null, 2);
         if (summaryText.length > 50000) {
-          summaryText = summaryText.substring(0, 50000) + '\n... [Data Truncated due to size]';
+          summaryText =
+            summaryText.substring(0, 50000) +
+            "\n... [Data Truncated due to size]";
         }
       } catch (e) {
         summaryText = "[Data Overview]";
@@ -331,7 +534,7 @@ Omnilife Tracker is a 100% local, offline-first super-app. All my data is stored
 8. **Reminders (\`reminders\`)**: One-off and recurring tasks with \`priority\` ('high'|'medium'|'low'), \`dueDate\`, \`time\`, and \`enableAlert\`. Reminders are directly spawned from Expeditions and Finances for billing and trip alerts.
 9. **Focus Audio**: Embedded ambient audio states. Notice how audio states integrate directly with Pomodoro sessions to lower stress and induce flow.
 10. **Sketchpad**: Digital drawing tools (not purely data).
-11. **Settings / Theme**: Custom Neon Color profiles ("Volcanic Orange", "Cyber Cyan", etc.) are stored in \`neonTheme\`.
+11. **Settings / Theme**: Custom Neon Color profiles are stored in \`neonTheme\`. UI structural themes ('minimal', 'retro', 'cute', 'midnight', 'crimson', 'playful') are stored in \`bgTheme\`.
 12. **Synopsis**: Digested logs are sent directly to Email, Telegram, and SMS through the frontend gateways.
 
 ### MY CURRENT CONTEXT:
@@ -354,19 +557,22 @@ ${summaryText}
 4. **Actionable Roadmap**: Provide 3-5 specific, stoic, and immediately actionable steps I can take TODAY to fix weak points and accelerate my momentum.
 5. **Tone**: Be professional, analytical, objective, and highly strategic. Pretend you are Advising a high-performance executive.`;
     }
-    
-    setAiModal({ isOpen: true, promptText: finalPrompt }); 
+
+    setAiModal({ isOpen: true, promptText: finalPrompt });
   };
 
   // 1. Initial Load
   useEffect(() => {
     let loaded = loadData();
     // If in demo mode and no demo data was loaded from storage, use DEMO_STATE
-    if (window.location.search.includes('demo=true') && !localStorage.getItem('demo_lt_v5')) {
+    if (
+      window.location.search.includes("demo=true") &&
+      !localStorage.getItem("demo_lt_v5")
+    ) {
       loaded = DEMO_STATE;
       saveData(DEMO_STATE);
     }
-    
+
     setAppState(loaded);
 
     const loadedSync = loadSyncCfg();
@@ -391,7 +597,7 @@ ${summaryText}
   }, []);
 
   // 2. Toast managers
-  const showToast = (msg: string, type: 'ok' | 'nfo' = 'ok') => {
+  const showToast = (msg: string, type: "ok" | "nfo" = "ok") => {
     setToast({ msg, type });
   };
 
@@ -404,86 +610,105 @@ ${summaryText}
 
   // 3. Sync Logger helper
   const logSync = (msg: string) => {
-    const ts = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    setSyncLog(prev => `[${ts}] ${msg}\n${prev}`);
+    const ts = new Date().toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    setSyncLog((prev) => `[${ts}] ${msg}\n${prev}`);
   };
 
   // 4. Cloud operations
   const syncNow = async () => {
-    if (syncCfg.provider === 'none') {
-      showToast('CLOUDSYNC IS TERMINATED', 'nfo');
+    if (syncCfg.provider === "none") {
+      showToast("CLOUDSYNC IS TERMINATED", "nfo");
       return;
     }
     setIsSyncing(true);
-    logSync('Sync initialized...');
+    logSync("Sync initialized...");
 
     try {
-      if (syncCfg.provider === 'gist') {
+      if (syncCfg.provider === "gist") {
         const res = await syncGist(syncCfg, appState);
-        setSyncCfg(prev => {
-          const next = { ...prev, gistId: res.gistId, lastSync: 'ok' as const, lastSyncTs: Date.now() };
+        setSyncCfg((prev) => {
+          const next = {
+            ...prev,
+            gistId: res.gistId,
+            lastSync: "ok" as const,
+            lastSyncTs: Date.now(),
+          };
           saveSyncCfg(next);
           return next;
         });
       } else {
         const res = await syncJSONBin(syncCfg, appState);
-        setSyncCfg(prev => {
-          const next = { ...prev, jbId: res.binId, lastSync: 'ok' as const, lastSyncTs: Date.now() };
+        setSyncCfg((prev) => {
+          const next = {
+            ...prev,
+            jbId: res.binId,
+            lastSync: "ok" as const,
+            lastSyncTs: Date.now(),
+          };
           saveSyncCfg(next);
           return next;
         });
       }
-      logSync('Sync success ✓');
-      showToast('DATABASE SAVED TO CLOUD DRIVE', 'ok');
+      logSync("Sync success ✓");
+      showToast("DATABASE SAVED TO CLOUD DRIVE", "ok");
     } catch (err: any) {
-      setSyncCfg(prev => {
-        const next = { ...prev, lastSync: 'error' as const };
+      setSyncCfg((prev) => {
+        const next = { ...prev, lastSync: "error" as const };
         saveSyncCfg(next);
         return next;
       });
       logSync(`Sync failed: ${err.message}`);
-      showToast(`SYNC FAILED: ${err.message}`, 'nfo');
+      showToast(`SYNC FAILED: ${err.message}`, "nfo");
     } finally {
       setIsSyncing(false);
     }
   };
 
   const pullFromCloud = async () => {
-    if (syncCfg.provider === 'none') return;
-    if (!confirm('PULL DATABASE BACKUP?\nYour local un-synchronized changes will be completely overwritten.')) return;
+    if (syncCfg.provider === "none") return;
+    if (
+      !confirm(
+        "PULL DATABASE BACKUP?\nYour local un-synchronized changes will be completely overwritten.",
+      )
+    )
+      return;
     setIsSyncing(true);
-    logSync('Pull initialized...');
+    logSync("Pull initialized...");
 
     try {
       let pulled: AppState;
-      if (syncCfg.provider === 'gist') {
+      if (syncCfg.provider === "gist") {
         pulled = await pullGist(syncCfg);
       } else {
         pulled = await pullJSONBin(syncCfg);
       }
-      
+
       setAppState(pulled);
       saveData(pulled);
-      logSync('Pull success ✓');
-      showToast('PULLED DATABASE BACKUP SUCCESSFULLY', 'ok');
+      logSync("Pull success ✓");
+      showToast("PULLED DATABASE BACKUP SUCCESSFULLY", "ok");
     } catch (err: any) {
       logSync(`Pull failed: ${err.message}`);
-      showToast(`PULL FAILED: ${err.message}`, 'nfo');
+      showToast(`PULL FAILED: ${err.message}`, "nfo");
     } finally {
       setIsSyncing(false);
     }
   };
 
   const updateSyncFields = (updatedFields: Partial<SyncConfig>) => {
-    setSyncCfg(prev => {
+    setSyncCfg((prev) => {
       const next = { ...prev, ...updatedFields };
       saveSyncCfg(next);
       return next;
     });
   };
 
-  const selectSyncProvider = (provider: 'none' | 'gist' | 'jsonbin') => {
-    setSyncCfg(prev => {
+  const selectSyncProvider = (provider: "none" | "gist" | "jsonbin") => {
+    setSyncCfg((prev) => {
       const next = { ...prev, provider };
       saveSyncCfg(next);
       return next;
@@ -492,22 +717,31 @@ ${summaryText}
   };
 
   const clearSyncConfig = () => {
-    const next: SyncConfig = { provider: 'none', gistToken: '', gistId: '', jbKey: '', jbId: '', lastSync: '', lastSyncTs: 0 };
+    const next: SyncConfig = {
+      provider: "none",
+      gistToken: "",
+      gistId: "",
+      jbKey: "",
+      jbId: "",
+      lastSync: "",
+      lastSyncTs: 0,
+    };
     setSyncCfg(next);
     saveSyncCfg(next);
-    setSyncLog('');
-    showToast('DISCONNECTED SYNC PROFILE', 'nfo');
+    setSyncLog("");
+    showToast("DISCONNECTED SYNC PROFILE", "nfo");
   };
 
   // 5. Pomodoro clock ticker
   useEffect(() => {
     let intervalId: any = null;
-    if (pomoState !== 'idle') {
+    if (pomoState !== "idle") {
       intervalId = setInterval(() => {
-        setPomoElapsedSeconds(prev => {
+        setPomoElapsedSeconds((prev) => {
           const next = prev + 1;
-          const targetLimit = (pomoState === 'work' ? pomoWorkMin : pomoBrkMin) * 60;
-          
+          const targetLimit =
+            (pomoState === "work" ? pomoWorkMin : pomoBrkMin) * 60;
+
           if (next >= targetLimit) {
             clearInterval(intervalId);
             onPomoCycleCompleted();
@@ -516,15 +750,15 @@ ${summaryText}
 
           // Format countdown format
           const rem = targetLimit - next;
-          const m = String(Math.floor(rem / 60)).padStart(2, '0');
-          const s = String(rem % 60).padStart(2, '0');
+          const m = String(Math.floor(rem / 60)).padStart(2, "0");
+          const s = String(rem % 60).padStart(2, "0");
           setPomoTimeLeft(`${m}:${s}`);
           setPomoPercent(next / targetLimit);
           return next;
         });
       }, 1000);
     } else {
-      const m = String(pomoWorkMin).padStart(2, '0');
+      const m = String(pomoWorkMin).padStart(2, "0");
       setPomoTimeLeft(`${m}:00`);
       setPomoPercent(0);
     }
@@ -533,39 +767,44 @@ ${summaryText}
   }, [pomoState, pomoWorkMin, pomoBrkMin]);
 
   const onPomoCycleCompleted = () => {
-    const isWork = pomoState === 'work';
+    const isWork = pomoState === "work";
 
     if (isWork && pomoTaskName) {
       const minsEarned = pomoWorkMin;
       const hrsEquivalent = Math.round((minsEarned / 60) * 100) / 100;
 
       const newSession: PomoSession = {
-        id: 'p_done_' + Date.now(),
+        id: "p_done_" + Date.now(),
         task: pomoTaskName,
-        cat: pomoTaskCat || 'custom',
+        cat: pomoTaskCat || "custom",
         duration: minsEarned,
-        type: 'work',
+        type: "work",
         date: todayStr(),
-        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-        status: 'completed'
+        time: new Date().toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        status: "completed",
       };
 
       // Sound feedback synth
       try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const audioCtx = new (
+          window.AudioContext || (window as any).webkitAudioContext
+        )();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain);
         gain.connect(audioCtx.destination);
-        osc.type = 'sine';
+        osc.type = "sine";
         osc.frequency.setValueAtTime(880, audioCtx.currentTime); // High A
         gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.35);
       } catch (err) {}
 
-      setAppState(prev => {
-        const cat = pomoTaskCat || 'custom';
+      setAppState((prev) => {
+        const cat = pomoTaskCat || "custom";
         const item = pomoTaskName;
 
         let dailyNode = { ...prev.daily };
@@ -573,13 +812,18 @@ ${summaryText}
         if (!dailyNode[activeDate][cat]) dailyNode[activeDate][cat] = {};
 
         const currentEntry = dailyNode[activeDate][cat]![item] || {
-          status: 'pending', reps: 0, hours: 0, satisfaction: 0, notes: ''
+          status: "pending",
+          reps: 0,
+          hours: 0,
+          satisfaction: 0,
+          notes: "",
         };
 
         const updatedEntry = {
           ...currentEntry,
-          status: 'done' as const,
-          hours: Math.round(((currentEntry.hours || 0) + hrsEquivalent) * 100) / 100
+          status: "done" as const,
+          hours:
+            Math.round(((currentEntry.hours || 0) + hrsEquivalent) * 100) / 100,
         };
 
         dailyNode[activeDate][cat]![item] = updatedEntry;
@@ -587,74 +831,87 @@ ${summaryText}
         const next = {
           ...prev,
           pomoSessions: [...(prev.pomoSessions || []), newSession],
-          daily: dailyNode
+          daily: dailyNode,
         };
         saveData(next);
         return next;
       });
 
-      showToast(`CONGRATS! ${pomoWorkMin}MIN FOCUS ACHIEVED — ADDED TO TODAY CHECKLIST!`, 'ok');
-      
+      showToast(
+        `CONGRATS! ${pomoWorkMin}MIN FOCUS ACHIEVED — ADDED TO TODAY CHECKLIST!`,
+        "ok",
+      );
+
       // Auto transitions into breaks
-      setPomoState('break');
+      setPomoState("break");
       setPomoElapsedSeconds(0);
     } else {
       // Completed breaks
       try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const audioCtx = new (
+          window.AudioContext || (window as any).webkitAudioContext
+        )();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain);
         gain.connect(audioCtx.destination);
-        osc.type = 'triangle';
+        osc.type = "triangle";
         osc.frequency.setValueAtTime(440, audioCtx.currentTime); // Concert A
         gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.45);
       } catch (err) {}
 
-      showToast('BREAK CONCLUDED. SELECT WORK TARGET AND RESTART LOCK!', 'ok');
-      setPomoState('idle');
+      showToast("BREAK CONCLUDED. SELECT WORK TARGET AND RESTART LOCK!", "ok");
+      setPomoState("idle");
       setPomoElapsedSeconds(0);
     }
   };
 
   const stopPomo = () => {
-    if (pomoState === 'idle') return;
+    if (pomoState === "idle") return;
 
     const secondsTracked = pomoElapsedSeconds;
 
     // Record incomplete or failed Pomodoro sessions
-    if (pomoState === 'work' && secondsTracked > 5 && pomoTaskName) {
+    if (pomoState === "work" && secondsTracked > 5 && pomoTaskName) {
       const minutesSpent = Math.round((secondsTracked / 60) * 100) / 100;
 
       const newSession: PomoSession = {
-        id: 'p_failed_' + Date.now(),
+        id: "p_failed_" + Date.now(),
         task: pomoTaskName,
-        cat: pomoTaskCat || 'custom',
+        cat: pomoTaskCat || "custom",
         duration: minutesSpent,
-        type: 'work',
+        type: "work",
         date: todayStr(),
-        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-        status: 'interrupted'
+        time: new Date().toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        status: "interrupted",
       };
 
-      setAppState(prev => {
-        const cat = pomoTaskCat || 'custom';
+      setAppState((prev) => {
+        const cat = pomoTaskCat || "custom";
         const item = pomoTaskName;
-        
+
         let dailyNode = { ...prev.daily };
         if (!dailyNode[activeDate]) dailyNode[activeDate] = {};
         if (!dailyNode[activeDate][cat]) dailyNode[activeDate][cat] = {};
 
         const currentEntry = dailyNode[activeDate][cat]![item] || {
-          status: 'pending', reps: 0, hours: 0, satisfaction: 0, notes: ''
+          status: "pending",
+          reps: 0,
+          hours: 0,
+          satisfaction: 0,
+          notes: "",
         };
 
         const hrsEquivalent = Math.round((minutesSpent / 60) * 100) / 100;
         const updatedEntry = {
           ...currentEntry,
-          hours: Math.round(((currentEntry.hours || 0) + hrsEquivalent) * 100) / 100
+          hours:
+            Math.round(((currentEntry.hours || 0) + hrsEquivalent) * 100) / 100,
         };
 
         dailyNode[activeDate][cat]![item] = updatedEntry;
@@ -662,48 +919,51 @@ ${summaryText}
         const next = {
           ...prev,
           pomoSessions: [...(prev.pomoSessions || []), newSession],
-          daily: dailyNode
+          daily: dailyNode,
         };
         saveData(next);
         return next;
       });
 
-      showToast(`interruption recorded! logged ${minutesSpent}m focus effort successfully.`, 'ok');
+      showToast(
+        `interruption recorded! logged ${minutesSpent}m focus effort successfully.`,
+        "ok",
+      );
     } else {
-      showToast('FOCUS LOOP DISCONNECTED EARLY — SESSION UN-LOGGED', 'nfo');
+      showToast("FOCUS LOOP DISCONNECTED EARLY — SESSION UN-LOGGED", "nfo");
     }
 
-    setPomoState('idle');
+    setPomoState("idle");
     setPomoPercent(0);
     setPomoElapsedSeconds(0);
   };
 
   const handleStartPomo = () => {
-    if (pomoState !== 'idle') return;
+    if (pomoState !== "idle") return;
     if (!pomoTaskName) return;
 
-    setPomoState('work');
+    setPomoState("work");
     setPomoElapsedSeconds(0);
-    showToast(`FOCUS LOCKED ON: ${pomoTaskName.toUpperCase()}`, 'ok');
+    showToast(`FOCUS LOCKED ON: ${pomoTaskName.toUpperCase()}`, "ok");
   };
 
   const handleSetPomoTask = (cat: TrackerCategory, item: string) => {
     setPomoTaskCat(cat);
     setPomoTaskName(item);
-    showToast(`POMO TARGET REGISTERED: ${item.toUpperCase()}`, 'ok');
+    showToast(`POMO TARGET REGISTERED: ${item.toUpperCase()}`, "ok");
   };
 
   const handleSetPomoPreset = (preset: string) => {
     setPomoPreset(preset);
-    if (pomoState !== 'idle') return;
+    if (pomoState !== "idle") return;
 
-    if (preset === 'classic') {
+    if (preset === "classic") {
       setPomoWorkMin(25);
       setPomoBrkMin(5);
-    } else if (preset === 'deep') {
+    } else if (preset === "deep") {
       setPomoWorkMin(50);
       setPomoBrkMin(10);
-    } else if (preset === 'ultra') {
+    } else if (preset === "ultra") {
       setPomoWorkMin(90);
       setPomoBrkMin(20);
     }
@@ -715,25 +975,43 @@ ${summaryText}
   };
 
   // 6. Database Getters
-  const getDayD = (ds: string, cat: TrackerCategory, item: string): DayEntry => {
+  const getDayD = (
+    ds: string,
+    cat: TrackerCategory,
+    item: string,
+  ): DayEntry => {
     if (!appState.daily[ds]) appState.daily[ds] = {};
     if (!appState.daily[ds][cat]) appState.daily[ds][cat] = {};
     if (!appState.daily[ds][cat]![item]) {
       appState.daily[ds][cat]![item] = {
-        status: 'pending', reps: 0, hours: 0, satisfaction: 0, notes: ''
+        status: "pending",
+        reps: 0,
+        hours: 0,
+        satisfaction: 0,
+        notes: "",
       };
     }
     return appState.daily[ds][cat]![item];
   };
 
-  const updateDayField = (ds: string, cat: TrackerCategory, item: string, field: keyof DayEntry, val: any) => {
-    setAppState(prev => {
+  const updateDayField = (
+    ds: string,
+    cat: TrackerCategory,
+    item: string,
+    field: keyof DayEntry,
+    val: any,
+  ) => {
+    setAppState((prev) => {
       let dailyNode = { ...prev.daily };
       if (!dailyNode[ds]) dailyNode[ds] = {};
       if (!dailyNode[ds][cat]) dailyNode[ds][cat] = {};
-      
+
       const current = dailyNode[ds][cat]![item] || {
-        status: 'pending', reps: 0, hours: 0, satisfaction: 0, notes: ''
+        status: "pending",
+        reps: 0,
+        hours: 0,
+        satisfaction: 0,
+        notes: "",
       };
 
       const updated = { ...current, [field]: val };
@@ -746,13 +1024,15 @@ ${summaryText}
   };
 
   const getRepsT = (cat: TrackerCategory, item: string): number => {
-    return (appState.repsTarget[cat] && appState.repsTarget[cat]![item] !== undefined)
+    return appState.repsTarget[cat] &&
+      appState.repsTarget[cat]![item] !== undefined
       ? appState.repsTarget[cat]![item]
       : 1;
   };
 
   const getHrsT = (cat: TrackerCategory, item: string): number => {
-    return (appState.hoursTarget[cat] && appState.hoursTarget[cat]![item] !== undefined)
+    return appState.hoursTarget[cat] &&
+      appState.hoursTarget[cat]![item] !== undefined
       ? appState.hoursTarget[cat]![item]
       : 1;
   };
@@ -760,20 +1040,20 @@ ${summaryText}
   // Streak calculators
   const calculateStreak = (cat: TrackerCategory, item: string): number => {
     let s = 0;
-    const d = new Date(todayStr() + 'T00:00:00');
-    
+    const d = new Date(todayStr() + "T00:00:00");
+
     for (let i = 0; i < 365; i++) {
       const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const dy = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const dy = String(d.getDate()).padStart(2, "0");
       const ds = `${year}-${month}-${dy}`;
 
       const entry = appState.daily[ds]?.[cat]?.[item];
-      const st = entry ? entry.status : 'pending';
+      const st = entry ? entry.status : "pending";
 
-      if (st === 'done') {
+      if (st === "done") {
         s++;
-      } else if (st === 'skipped') {
+      } else if (st === "skipped") {
         d.setDate(d.getDate() - 1);
         continue;
       } else {
@@ -789,18 +1069,22 @@ ${summaryText}
     return appState.recurringTasks[`${cat}::${item}`] || null;
   };
 
-  const isScheduledToday = (cat: TrackerCategory, item: string, ds: string): boolean => {
+  const isScheduledToday = (
+    cat: TrackerCategory,
+    item: string,
+    ds: string,
+  ): boolean => {
     const rec = getRecurring(cat, item);
     if (!rec) return true; // Daily constant
-    
-    const d = new Date(ds + 'T00:00:00');
+
+    const d = new Date(ds + "T00:00:00");
     const dow = (d.getDay() + 6) % 7; // Convert Sun=0 to Sun=6, Mon=0
 
-    if (rec.freq === 'daily') return true;
-    if (rec.freq === 'weekdays') return dow < 5;
-    if (rec.freq === 'weekends') return dow >= 5;
-    if (rec.freq === 'custom') return rec.days.includes(dow);
-    
+    if (rec.freq === "daily") return true;
+    if (rec.freq === "weekdays") return dow < 5;
+    if (rec.freq === "weekends") return dow >= 5;
+    if (rec.freq === "custom") return rec.days.includes(dow);
+
     return true;
   };
 
@@ -816,34 +1100,38 @@ ${summaryText}
     let satSum = 0;
     let satCount = 0;
 
-    CATS.forEach(cat => {
+    CATS.forEach((cat) => {
       // Build a set of all tracker items for this category (registered + adhoc from daily data)
       const registeredItems = appState.items[cat.id] || [];
       const adhocItems = Object.keys(appState.daily[ds]?.[cat.id] || {});
       const allItems = Array.from(new Set([...registeredItems, ...adhocItems]));
 
-      allItems.forEach(item => {
+      allItems.forEach((item) => {
         const isSch = isScheduledToday(cat.id, item, ds);
         const d = getDayD(ds, cat.id, item);
-        let statusValue = d ? d.status : 'pending';
+        let statusValue = d ? d.status : "pending";
 
         // Auto skip un-scheduled pending items
-        if (!isSch && statusValue === 'pending') {
-          statusValue = 'skipped';
+        if (!isSch && statusValue === "pending") {
+          statusValue = "skipped";
         }
 
         // We count it if it's scheduled OR if it's an adhoc item that was marked done or has hours
-        const isAdhocCompleted = !registeredItems.includes(item) && (statusValue === 'done' || (d && d.hours > 0));
-        
+        const isAdhocCompleted =
+          !registeredItems.includes(item) &&
+          (statusValue === "done" || (d && d.hours > 0));
+
         if (isSch || isAdhocCompleted) {
           if (isSch) total++;
-          if (statusValue === 'done') done++;
-          else if (statusValue === 'missed') missed++;
-          else if (statusValue === 'skipped') skipped++;
+          if (statusValue === "done") done++;
+          else if (statusValue === "missed") missed++;
+          else if (statusValue === "skipped") skipped++;
           else if (isSch) pending++;
 
-          const hOffset = d ? (d.hours || 0) : 0;
-          const rOffset = d ? (d.reps || (statusValue === 'done' ? getRepsT(cat.id, item) : 0)) : 0;
+          const hOffset = d ? d.hours || 0 : 0;
+          const rOffset = d
+            ? d.reps || (statusValue === "done" ? getRepsT(cat.id, item) : 0)
+            : 0;
           hrs += hOffset;
           reps += rOffset;
 
@@ -852,7 +1140,7 @@ ${summaryText}
             satCount++;
           }
         } else {
-          if (statusValue === 'skipped') skipped++;
+          if (statusValue === "skipped") skipped++;
         }
       });
     });
@@ -866,28 +1154,35 @@ ${summaryText}
       hrs,
       reps,
       sat: satCount ? satSum / satCount : 0,
-      pct: total ? Math.round((done / total) * 100) : 0
+      pct: total ? Math.round((done / total) * 100) : 0,
     };
   };
 
   const cycleStatus = (ds: string, cat: TrackerCategory, item: string) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       let dailyNode = { ...prev.daily };
       if (!dailyNode[ds]) dailyNode[ds] = {};
       if (!dailyNode[ds][cat]) dailyNode[ds][cat] = {};
 
       const current = dailyNode[ds][cat]![item] || {
-        status: 'pending', reps: 0, hours: 0, satisfaction: 0, notes: ''
+        status: "pending",
+        reps: 0,
+        hours: 0,
+        satisfaction: 0,
+        notes: "",
       };
 
-      const cycle: TrackerStatus[] = ['pending', 'done', 'missed', 'skipped'];
+      const cycle: TrackerStatus[] = ["pending", "done", "missed", "skipped"];
       const curIdx = cycle.indexOf(current.status);
       const nextStatus = cycle[(curIdx + 1) % cycle.length];
 
       const updated = {
         ...current,
         status: nextStatus,
-        reps: nextStatus === 'done' && !current.reps ? getRepsT(cat, item) : current.reps
+        reps:
+          nextStatus === "done" && !current.reps
+            ? getRepsT(cat, item)
+            : current.reps,
       };
 
       dailyNode[ds][cat]![item] = updated;
@@ -900,19 +1195,19 @@ ${summaryText}
 
   // 8. Database mutators
   const updateProfile = (name: string, tagline: string, email: string) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = {
         ...prev,
-        profile: { name, tagline, email }
+        profile: { name, tagline, email },
       };
       saveData(next);
       return next;
     });
-    showToast('PROFILE RECONFIGURED ✓', 'ok');
+    showToast("PROFILE RECONFIGURED ✓", "ok");
   };
 
   const addItemInput = (cat: TrackerCategory, name: string) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const list = prev.items[cat] || [];
       if (list.includes(name)) return prev;
 
@@ -920,40 +1215,46 @@ ${summaryText}
         ...prev,
         items: {
           ...prev.items,
-          [cat]: [...list, name]
-        }
+          [cat]: [...list, name],
+        },
       };
       saveData(next);
       return next;
     });
-    showToast(`ADDED TRACKER TARGET: ${name.toUpperCase()}`, 'ok');
+    showToast(`ADDED TRACKER TARGET: ${name.toUpperCase()}`, "ok");
   };
 
   const removeItemInput = (cat: TrackerCategory, name: string) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const list = prev.items[cat] || [];
       const next = {
         ...prev,
         items: {
           ...prev.items,
-          [cat]: list.filter(it => it !== name)
-        }
+          [cat]: list.filter((it) => it !== name),
+        },
       };
       saveData(next);
       return next;
     });
-    showToast('REMOVED CHECKLIST ELEMENT', 'nfo');
+    showToast("REMOVED CHECKLIST ELEMENT", "nfo");
   };
 
-  const updateTargetFields = (cat: TrackerCategory, item: string, field: 'reps' | 'hours', val: number) => {
-    setAppState(prev => {
-      const targetObj = field === 'reps' ? { ...prev.repsTarget } : { ...prev.hoursTarget };
+  const updateTargetFields = (
+    cat: TrackerCategory,
+    item: string,
+    field: "reps" | "hours",
+    val: number,
+  ) => {
+    setAppState((prev) => {
+      const targetObj =
+        field === "reps" ? { ...prev.repsTarget } : { ...prev.hoursTarget };
       if (!targetObj[cat]) targetObj[cat] = {};
       targetObj[cat]![item] = Math.max(0, val || 0);
 
       const next = {
         ...prev,
-        [field === 'reps' ? 'repsTarget' : 'hoursTarget']: targetObj
+        [field === "reps" ? "repsTarget" : "hoursTarget"]: targetObj,
       };
       saveData(next);
       return next;
@@ -961,83 +1262,99 @@ ${summaryText}
   };
 
   // 9. Reminders Alarm Database handlers
-  const handleAddReminder = (rem: Omit<Reminder, 'id' | 'status'>) => {
+  const handleAddReminder = (rem: Omit<Reminder, "id" | "status">) => {
     const newRem: Reminder = {
       ...rem,
-      id: 'rem_' + Date.now(),
-      status: 'pending'
+      id: "rem_" + Date.now(),
+      status: "pending",
     };
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = {
         ...prev,
-        reminders: [...(prev.reminders || []), newRem]
+        reminders: [...(prev.reminders || []), newRem],
       };
       saveData(next);
       return next;
     });
-    showToast('PLANNER EVENT CREATED ✓', 'ok');
+    showToast("PLANNER EVENT CREATED ✓", "ok");
   };
 
   const handleEditReminder = (id: string, updated: Partial<Reminder>) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = {
         ...prev,
-        reminders: (prev.reminders || []).map(r => r.id === id ? { ...r, ...updated } : r)
+        reminders: (prev.reminders || []).map((r) =>
+          r.id === id ? { ...r, ...updated } : r,
+        ),
       };
       saveData(next);
       return next;
     });
-    showToast('DEADLINE MODIFIED ✓', 'ok');
+    showToast("DEADLINE MODIFIED ✓", "ok");
   };
 
   const handleDeleteReminder = (id: string) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = {
         ...prev,
-        reminders: (prev.reminders || []).filter(r => r.id !== id)
+        reminders: (prev.reminders || []).filter((r) => r.id !== id),
       };
       saveData(next);
       return next;
     });
-    showToast('PLANNER EVENT REMOVED', 'nfo');
+    showToast("PLANNER EVENT REMOVED", "nfo");
   };
 
   const handleToggleReminder = (id: string) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = {
         ...prev,
-        reminders: (prev.reminders || []).map(r => r.id === id ? { ...r, status: (r.status === 'done' ? 'pending' : 'done') as any } : r)
+        reminders: (prev.reminders || []).map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                status: (r.status === "done" ? "pending" : "done") as any,
+              }
+            : r,
+        ),
       };
       saveData(next);
       return next;
     });
-    showToast('EVENT STATUS RE-SAVED', 'ok');
+    showToast("EVENT STATUS RE-SAVED", "ok");
   };
 
   const handleMuteReminder = (id: string) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = {
         ...prev,
-        reminders: (prev.reminders || []).map(r => r.id === id ? { ...r, enableAlert: false } : r)
+        reminders: (prev.reminders || []).map((r) =>
+          r.id === id ? { ...r, enableAlert: false } : r,
+        ),
       };
       saveData(next);
       return next;
     });
-    showToast('ALARM SILENCED', 'ok');
+    showToast("ALARM SILENCED", "ok");
   };
 
   // 10. Journals flexible actions
   const handleSaveJournal = (dt: string, updated: Partial<JournalEntry>) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       let journalsNode = { ...prev.journals };
       const current = journalsNode[dt] || {
-        date: dt, mood: 0, energy: 0, tags: [], sections: {}, savedAt: ''
+        date: dt,
+        mood: 0,
+        energy: 0,
+        tags: [],
+        sections: {},
+        savedAt: "",
       };
 
       const nextEntry = {
         ...current,
         ...updated,
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
       };
       journalsNode[dt] = nextEntry;
 
@@ -1048,39 +1365,39 @@ ${summaryText}
   };
 
   const handleUpdateJournalPrompts = (prompts: JournalPrompt[]) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = { ...prev, journalPrompts: prompts };
       saveData(next);
       return next;
     });
-    showToast('DIARY HEADINGS ADAPTED', 'ok');
+    showToast("DIARY HEADINGS ADAPTED", "ok");
   };
 
   const handleUpdateJournalTags = (tags: string[]) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = { ...prev, journalTags: tags };
       saveData(next);
       return next;
     });
-    showToast('TAG COLLECTION RE-INDEXED', 'ok');
+    showToast("TAG COLLECTION RE-INDEXED", "ok");
   };
 
   // 11. Custom Recurrence overlay modal callbacks
   const openRecurringModalObj = (cat: TrackerCategory, item: string) => {
     setRecCat(cat);
     setRecItem(item);
-    
-    const exist = getRecurring(cat, item) || { freq: 'daily', days: [] };
-    setRecFreq(exist.freq || 'daily');
+
+    const exist = getRecurring(cat, item) || { freq: "daily", days: [] };
+    setRecFreq(exist.freq || "daily");
     setRecDays((exist.days || []).slice());
-    
+
     setRecModalOpen(true);
   };
 
   const toggleModalRecDay = (dayIndex: number) => {
-    setRecDays(prev => {
+    setRecDays((prev) => {
       if (prev.includes(dayIndex)) {
-        return prev.filter(d => d !== dayIndex);
+        return prev.filter((d) => d !== dayIndex);
       } else {
         return [...prev, dayIndex];
       }
@@ -1091,7 +1408,7 @@ ${summaryText}
     if (!recCat || !recItem) return;
     const taskKey = `${recCat}::${recItem}`;
 
-    setAppState(prev => {
+    setAppState((prev) => {
       let node = { ...prev.recurringTasks };
       node[taskKey] = { freq: recFreq, days: recDays };
 
@@ -1101,14 +1418,14 @@ ${summaryText}
     });
 
     setRecModalOpen(false);
-    showToast(`RECURRING SCHEDULE SAVED FOR: ${recItem.toUpperCase()}`, 'ok');
+    showToast(`RECURRING SCHEDULE SAVED FOR: ${recItem.toUpperCase()}`, "ok");
   };
 
   const handleRemoveRecurringParams = () => {
     if (!recCat || !recItem) return;
     const taskKey = `${recCat}::${recItem}`;
 
-    setAppState(prev => {
+    setAppState((prev) => {
       let node = { ...prev.recurringTasks };
       delete node[taskKey];
 
@@ -1118,66 +1435,75 @@ ${summaryText}
     });
 
     setRecModalOpen(false);
-    showToast('REMOVED SCHEDULE CONFIG — DAILY SINCE CONSTANT', 'nfo');
+    showToast("REMOVED SCHEDULE CONFIG — DAILY SINCE CONSTANT", "nfo");
   };
 
   // 12. Backup JSON/CSV handlers
   const handleExportJSON = () => {
-    const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(appState, null, 2)], {
+      type: "application/json",
+    });
     const u = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = u;
     link.download = `lifetracker_db_${todayStr()}.json`;
     link.click();
     URL.revokeObjectURL(u);
-    showToast('JSON BACKUP GENERATED!', 'ok');
+    showToast("JSON BACKUP GENERATED!", "ok");
   };
 
   const handleExportCSV = () => {
-    let csv = 'Date,Category,Checklist Element,Checkins Status,Reps Completed,Focused Hours,Satisfaction score,Notes Reflection\n';
+    let csv =
+      "Date,Category,Checklist Element,Checkins Status,Reps Completed,Focused Hours,Satisfaction score,Notes Reflection\n";
     Object.keys(appState.daily).forEach((ds) => {
-      CATS.forEach(c => {
-        (appState.items[c.id] || []).forEach(item => {
+      CATS.forEach((c) => {
+        (appState.items[c.id] || []).forEach((item) => {
           const entry = getDayD(ds, c.id, item);
-          csv += `${ds},${c.label},"${item.replace(/"/g, '""')}",${entry.status},${entry.reps},${entry.hours},${entry.satisfaction},"${(entry.notes || '').replace(/"/g, '""')}"\n`;
+          csv += `${ds},${c.label},"${item.replace(/"/g, '""')}",${entry.status},${entry.reps},${entry.hours},${entry.satisfaction},"${(entry.notes || "").replace(/"/g, '""')}"\n`;
         });
       });
     });
 
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob([csv], { type: "text/csv" });
     const u = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = u;
     link.download = `lifetracker_export_${todayStr()}.csv`;
     link.click();
     URL.revokeObjectURL(u);
-    showToast('CSV EXPORT COMPLETED!', 'ok');
+    showToast("CSV EXPORT COMPLETED!", "ok");
   };
 
   const handleImportJSONText = (rawStr: string) => {
     try {
       const parsed = JSON.parse(rawStr);
-      if (confirm('Deploy backups merge? Existing profiles, checklists and checklist targets will merge cohesively.')) {
-        setAppState(prev => {
+      if (
+        confirm(
+          "Deploy backups merge? Existing profiles, checklists and checklist targets will merge cohesively.",
+        )
+      ) {
+        setAppState((prev) => {
           // Merge checklists arrays
           const nextItems = { ...prev.items };
           if (parsed.items) {
             Object.keys(parsed.items).forEach((catK: any) => {
               const prevL = prev.items[catK as TrackerCategory] || [];
               const rawL = parsed.items[catK] || [];
-              nextItems[catK as TrackerCategory] = Array.from(new Set([...prevL, ...rawL]));
+              nextItems[catK as TrackerCategory] = Array.from(
+                new Set([...prevL, ...rawL]),
+              );
             });
           }
 
           // Merge daily records
           const nextDaily = { ...prev.daily };
           if (parsed.daily) {
-            Object.keys(parsed.daily).forEach(ds => {
+            Object.keys(parsed.daily).forEach((ds) => {
               if (!nextDaily[ds]) nextDaily[ds] = {};
-              Object.keys(parsed.daily[ds]).forEach(catKey => {
+              Object.keys(parsed.daily[ds]).forEach((catKey) => {
                 nextDaily[ds][catKey as TrackerCategory] = {
                   ...(nextDaily[ds][catKey as TrackerCategory] || {}),
-                  ...(parsed.daily[ds][catKey] || {})
+                  ...(parsed.daily[ds][catKey] || {}),
                 };
               });
             });
@@ -1186,24 +1512,40 @@ ${summaryText}
           // Reminders list
           let nextRem = [...prev.reminders];
           if (parsed.reminders) {
-            const rawRem = Array.isArray(parsed.reminders) ? parsed.reminders : Object.values(parsed.reminders);
+            const rawRem = Array.isArray(parsed.reminders)
+              ? parsed.reminders
+              : Object.values(parsed.reminders);
             rawRem.forEach((r: any) => {
-              if (!nextRem.some(x => x.id === r.id)) nextRem.push(r);
+              if (!nextRem.some((x) => x.id === r.id)) nextRem.push(r);
             });
           }
 
           const nextState: AppState = {
             ...prev,
-            profile: parsed.profile ? { ...prev.profile, ...parsed.profile } : prev.profile,
+            profile: parsed.profile
+              ? { ...prev.profile, ...parsed.profile }
+              : prev.profile,
             items: nextItems,
             daily: nextDaily,
-            repsTarget: parsed.repsTarget ? { ...prev.repsTarget, ...parsed.repsTarget } : prev.repsTarget,
-            hoursTarget: parsed.hoursTarget ? { ...prev.hoursTarget, ...parsed.hoursTarget } : prev.hoursTarget,
+            repsTarget: parsed.repsTarget
+              ? { ...prev.repsTarget, ...parsed.repsTarget }
+              : prev.repsTarget,
+            hoursTarget: parsed.hoursTarget
+              ? { ...prev.hoursTarget, ...parsed.hoursTarget }
+              : prev.hoursTarget,
             reminders: nextRem,
-            goals: parsed.goals ? { ...prev.goals, ...parsed.goals } : prev.goals,
-            pomoSessions: parsed.pomoSessions ? [...prev.pomoSessions, ...(parsed.pomoSessions || [])] : prev.pomoSessions,
-            recurringTasks: parsed.recurringTasks ? { ...prev.recurringTasks, ...parsed.recurringTasks } : prev.recurringTasks,
-            journals: parsed.journals ? { ...prev.journals, ...parsed.journals } : prev.journals,
+            goals: parsed.goals
+              ? { ...prev.goals, ...parsed.goals }
+              : prev.goals,
+            pomoSessions: parsed.pomoSessions
+              ? [...prev.pomoSessions, ...(parsed.pomoSessions || [])]
+              : prev.pomoSessions,
+            recurringTasks: parsed.recurringTasks
+              ? { ...prev.recurringTasks, ...parsed.recurringTasks }
+              : prev.recurringTasks,
+            journals: parsed.journals
+              ? { ...prev.journals, ...parsed.journals }
+              : prev.journals,
             journalPrompts: parsed.journalPrompts || prev.journalPrompts,
             journalTags: parsed.journalTags || prev.journalTags,
           };
@@ -1211,62 +1553,66 @@ ${summaryText}
           saveData(nextState);
           return nextState;
         });
-        showToast('DATA BACKUPS APPLIED ✓', 'ok');
+        showToast("DATA BACKUPS APPLIED ✓", "ok");
       }
     } catch (e) {
-      alert('Corrupted JSON files. Overwrite failed.');
+      alert("Corrupted JSON files. Overwrite failed.");
     }
   };
 
   const handleResetAll = () => {
-    if (confirm('Perform factory database wipe out? Old logs, schedules, focus lists and targets parameters will be lost.')) {
-      if (confirm('Wiping out cannot be undone. Are you absolutely certain?')) {
-        localStorage.removeItem('lt_v5');
+    if (
+      confirm(
+        "Perform factory database wipe out? Old logs, schedules, focus lists and targets parameters will be lost.",
+      )
+    ) {
+      if (confirm("Wiping out cannot be undone. Are you absolutely certain?")) {
+        localStorage.removeItem("lt_v5");
         const empty = defData();
         setAppState(empty);
         saveData(empty);
-        showToast('FACILITY WIPED TO FACTORY BASE', 'nfo');
+        showToast("FACILITY WIPED TO FACTORY BASE", "nfo");
       }
     }
   };
 
   const handleLoadDemo = () => {
-    window.open(window.location.pathname + '?demo=true', '_blank');
+    window.open(window.location.pathname + "?demo=true", "_blank");
   };
 
   const handleToggleMuteGhostAlerts = () => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = { ...prev, muteGhostAlerts: !prev.muteGhostAlerts };
       saveData(next);
       return next;
     });
-    showToast('SYSTEM ALERTS OPTIONS UPDATED', 'ok');
+    showToast("SYSTEM ALERTS OPTIONS UPDATED", "ok");
   };
 
   const handleSetTheme = (themeHex: string) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = { ...prev, neonTheme: themeHex };
       saveData(next);
       return next;
     });
-    showToast(`THEME APPLIED: ${themeHex}`, 'ok');
+    showToast(`THEME APPLIED: ${themeHex}`, "ok");
   };
 
   const handleSetBgTheme = (bgId: string) => {
-    setAppState(prev => {
+    setAppState((prev) => {
       const next = { ...prev, bgTheme: bgId };
       saveData(next);
       return next;
     });
-    showToast(`BACKGROUND APPLIED: ${bgId.toUpperCase()}`, 'ok');
+    showToast(`BACKGROUND APPLIED: ${bgId.toUpperCase()}`, "ok");
   };
 
   // Rendering screen routing selector
   const renderFocalScreen = () => {
     switch (activeView) {
-      case 'dashboard':
+      case "dashboard":
         return (
-          <DashboardView 
+          <DashboardView
             state={appState}
             date={activeDate}
             onNavigate={setActiveView}
@@ -1278,18 +1624,18 @@ ${summaryText}
             onSetBgTheme={handleSetBgTheme}
           />
         );
-      case 'daily':
+      case "daily":
         return (
-          <DailyTrackerView 
+          <DailyTrackerView
             state={appState}
             date={activeDate}
             onSetDate={setActiveDate}
             onChangeDate={(offset) => {
-              const d = new Date(activeDate + 'T00:00:00');
+              const d = new Date(activeDate + "T00:00:00");
               d.setDate(d.getDate() + offset);
               const yr = d.getFullYear();
-              const mt = String(d.getMonth() + 1).padStart(2, '0');
-              const dy = String(d.getDate()).padStart(2, '0');
+              const mt = String(d.getMonth() + 1).padStart(2, "0");
+              const dy = String(d.getDate()).padStart(2, "0");
               setActiveDate(`${yr}-${mt}-${dy}`);
             }}
             onGoToday={() => setActiveDate(todayStr())}
@@ -1313,18 +1659,24 @@ ${summaryText}
             onOpenAIAnalyst={handleOpenAIAnalyst}
           />
         );
-      case 'goals':
+      case "goals":
         return (
-          <GoalsView 
+          <GoalsView
             state={appState}
             date={activeDate}
             onSaveGoal={(period, scope, key, field, val) => {
-              setAppState(prev => {
+              setAppState((prev) => {
                 let goalsNode = { ...prev.goals };
-                if (!goalsNode[period]) goalsNode[period] = { cat: {}, item: {} };
+                if (!goalsNode[period])
+                  goalsNode[period] = { cat: {}, item: {} };
                 if (!goalsNode[period][scope]) goalsNode[period][scope] = {};
-                if (!goalsNode[period][scope][key]) goalsNode[period][scope][key] = { reps: 0, hours: 0, auto: false };
-                
+                if (!goalsNode[period][scope][key])
+                  goalsNode[period][scope][key] = {
+                    reps: 0,
+                    hours: 0,
+                    auto: false,
+                  };
+
                 goalsNode[period][scope][key][field] = Math.max(0, val || 0);
                 goalsNode[period][scope][key].auto = false;
 
@@ -1334,10 +1686,14 @@ ${summaryText}
               });
             }}
             onResetGoalAuto={(period, scope, key) => {
-              setAppState(prev => {
+              setAppState((prev) => {
                 let goalsNode = { ...prev.goals };
                 if (goalsNode[period]?.[scope]?.[key]) {
-                  goalsNode[period][scope][key] = { reps: 0, hours: 0, auto: true };
+                  goalsNode[period][scope][key] = {
+                    reps: 0,
+                    hours: 0,
+                    auto: true,
+                  };
                 }
                 const next = { ...prev, goals: goalsNode };
                 saveData(next);
@@ -1348,33 +1704,51 @@ ${summaryText}
             getHrsT={getHrsT}
           />
         );
-      case 'analytics':
+      case "analytics":
         return (
-          <AnalyticsView 
+          <AnalyticsView
             state={appState}
             date={activeDate}
             dayStats={dayStats}
             getDayD={getDayD}
           />
         );
-      case 'calendar':
+      case "calendar":
         return (
-          <CalendarView 
+          <CalendarView
             state={appState}
             onSetDate={setActiveDate}
             onNavigate={setActiveView}
             dayStats={dayStats}
           />
         );
-      case 'expeditions':
-        return <ExpeditionsView state={appState} saveData={saveData} setAppState={setAppState} />;
-      case 'finances':
-        return <FinancesView state={appState} saveData={saveData} setAppState={setAppState} />;
-      case 'sketchpad':
-        return <SketchpadView state={appState} saveData={saveData} setAppState={setAppState} />;
-      case 'reminders':
+      case "expeditions":
         return (
-          <RemindersView 
+          <ExpeditionsView
+            state={appState}
+            saveData={saveData}
+            setAppState={setAppState}
+          />
+        );
+      case "finances":
+        return (
+          <FinancesView
+            state={appState}
+            saveData={saveData}
+            setAppState={setAppState}
+          />
+        );
+      case "sketchpad":
+        return (
+          <SketchpadView
+            state={appState}
+            saveData={saveData}
+            setAppState={setAppState}
+          />
+        );
+      case "reminders":
+        return (
+          <RemindersView
             state={appState}
             onAddReminder={handleAddReminder}
             onEditReminder={handleEditReminder}
@@ -1383,9 +1757,9 @@ ${summaryText}
             setView={setActiveView}
           />
         );
-      case 'pomo':
+      case "pomo":
         return (
-          <PomoView 
+          <PomoView
             state={appState}
             pomoState={pomoState}
             pomoTimeLeft={pomoTimeLeft}
@@ -1406,18 +1780,18 @@ ${summaryText}
             onNavigate={setActiveView}
           />
         );
-      case 'journal':
+      case "journal":
         return (
-          <JournalView 
+          <JournalView
             state={appState}
             date={activeDate}
             onSetDate={setActiveDate}
             onChangeDate={(offset) => {
-              const d = new Date(activeDate + 'T00:00:00');
+              const d = new Date(activeDate + "T00:00:00");
               d.setDate(d.getDate() + offset);
               const yr = d.getFullYear();
-              const mt = String(d.getMonth() + 1).padStart(2, '0');
-              const dy = String(d.getDate()).padStart(2, '0');
+              const mt = String(d.getMonth() + 1).padStart(2, "0");
+              const dy = String(d.getDate()).padStart(2, "0");
               setActiveDate(`${yr}-${mt}-${dy}`);
             }}
             dayStats={dayStats}
@@ -1429,18 +1803,20 @@ ${summaryText}
             onNavigate={setActiveView}
           />
         );
-      case 'synopsis':
+      case "guides":
+        return <GuidesView state={appState} />;
+      case "synopsis":
         return (
-          <SynopsisView 
+          <SynopsisView
             state={appState}
             date={activeDate}
             dayStats={dayStats}
             getDayD={getDayD}
           />
         );
-      case 'search':
+      case "search":
         return (
-          <SearchView 
+          <SearchView
             state={appState}
             onSetDate={setActiveDate}
             onSetTab={setActiveView as any}
@@ -1448,9 +1824,9 @@ ${summaryText}
             getDayD={getDayD}
           />
         );
-      case 'settings':
+      case "settings":
         return (
-          <SettingsView 
+          <SettingsView
             state={appState}
             onUpdateProfile={updateProfile}
             onAddItem={addItemInput}
@@ -1472,39 +1848,81 @@ ${summaryText}
             onResetAll={handleResetAll}
           />
         );
-      case 'help':
-        return <HelpView state={appState} onOpenAIAnalyst={handleOpenAIAnalyst} onLoadDemo={handleLoadDemo} />;
-      case 'alerts':
-        return <AlertsView state={appState} onToggleReminder={handleToggleReminder} onMuteReminder={handleMuteReminder} onToggleMuteSystemAlerts={handleToggleMuteGhostAlerts} onNavigate={setActiveView} />;
-      case 'focus_audio':
-        return <FocusAudioView activeTrack={audioTrack} volume={audioVolume} onSetTrack={setAudioTrack} onSetVolume={setAudioVolume} />;
-      case 'ai_analyst':
+      case "help":
         return (
-          <AiAnalystView 
-             state={appState} 
-             onOpenAIAnalyst={handleOpenAIAnalyst} 
-             onGeneratePrompt={(module) => {
-                let focusData: any = {};
-                if (module === 'all') focusData = appState;
-                else if (module === 'daily') focusData = { daily: appState.daily, goals: appState.goals, pomoSessions: appState.pomoSessions };
-                else if (module === 'journals') focusData = { journals: appState.journals, daily: appState.daily };
-                else if (module === 'finances') focusData = appState.finances;
-                else if (module === 'goals') focusData = { goals: appState.goals, daily: appState.daily, pomoSessions: appState.pomoSessions };
-                else if (module === 'expeditions') focusData = appState.expeditions;
-                else if (module === 'focus_audio') focusData = { pomoSessions: appState.pomoSessions, daily: appState.daily };
-                else focusData = appState;
+          <HelpView
+            state={appState}
+            onOpenAIAnalyst={handleOpenAIAnalyst}
+            onLoadDemo={handleLoadDemo}
+          />
+        );
+      case "alerts":
+        return (
+          <AlertsView
+            state={appState}
+            onToggleReminder={handleToggleReminder}
+            onMuteReminder={handleMuteReminder}
+            onToggleMuteSystemAlerts={handleToggleMuteGhostAlerts}
+            onNavigate={setActiveView}
+          />
+        );
+      case "focus_audio":
+        return (
+          <FocusAudioView
+            activeTrack={audioTrack}
+            volume={audioVolume}
+            onSetTrack={setAudioTrack}
+            onSetVolume={setAudioVolume}
+          />
+        );
+      case "ai_analyst":
+        return (
+          <AiAnalystView
+            state={appState}
+            onOpenAIAnalyst={handleOpenAIAnalyst}
+            onGeneratePrompt={(module) => {
+              let focusData: any = {};
+              if (module === "all") focusData = appState;
+              else if (module === "daily")
+                focusData = {
+                  daily: appState.daily,
+                  goals: appState.goals,
+                  pomoSessions: appState.pomoSessions,
+                };
+              else if (module === "journals")
+                focusData = {
+                  journals: appState.journals,
+                  daily: appState.daily,
+                };
+              else if (module === "finances") focusData = appState.finances;
+              else if (module === "goals")
+                focusData = {
+                  goals: appState.goals,
+                  daily: appState.daily,
+                  pomoSessions: appState.pomoSessions,
+                };
+              else if (module === "expeditions")
+                focusData = appState.expeditions;
+              else if (module === "focus_audio")
+                focusData = {
+                  pomoSessions: appState.pomoSessions,
+                  daily: appState.daily,
+                };
+              else focusData = appState;
 
-                let summaryText = "";
-                try {
-                  summaryText = JSON.stringify(focusData, null, 2); 
-                  if (summaryText.length > 50000) {
-                    summaryText = summaryText.substring(0, 50000) + '\n... [Data Truncated due to size]';
-                  }
-                } catch (e) {
-                  summaryText = "[Data Overview]";
+              let summaryText = "";
+              try {
+                summaryText = JSON.stringify(focusData, null, 2);
+                if (summaryText.length > 50000) {
+                  summaryText =
+                    summaryText.substring(0, 50000) +
+                    "\n... [Data Truncated due to size]";
                 }
+              } catch (e) {
+                summaryText = "[Data Overview]";
+              }
 
-                const finalPrompt = `Hello AI, act as my elite personal analyst and life-optimization executive assistant for my "Omnilife Tracker".
+              const finalPrompt = `Hello AI, act as my elite personal analyst and life-optimization executive assistant for my "Omnilife Tracker".
 
 ### PURPOSE OF THIS PROMPT:
 I am providing you with my personal data exported from Omnilife Tracker. I want you to perform deep, advanced, personalized analysis to help me optimize my life, habits, productivity, and finances. 
@@ -1526,7 +1944,7 @@ Omnilife Tracker is a 100% local, offline-first super-app. All my data is stored
 8. **Reminders (\`reminders\`)**: One-off and recurring tasks with \`priority\` ('high'|'medium'|'low'), \`dueDate\`, \`time\`, and \`enableAlert\`. Reminders are directly spawned from Expeditions and Finances for billing and trip alerts.
 9. **Focus Audio**: Embedded ambient audio states. Notice how audio states integrate directly with Pomodoro sessions to lower stress and induce flow.
 10. **Sketchpad**: Digital drawing tools (not purely data).
-11. **Settings / Theme**: Custom Neon Color profiles ("Volcanic Orange", "Cyber Cyan", etc.) are stored in \`neonTheme\`.
+11. **Settings / Theme**: Custom Neon Color profiles are stored in \`neonTheme\`. UI structural themes ('minimal', 'retro', 'cute', 'midnight', 'crimson', 'playful') are stored in \`bgTheme\`.
 12. **Synopsis**: Digested logs are sent directly to Email, Telegram, and SMS through the frontend gateways.
    
 ### MY CURRENT CONTEXT:
@@ -1547,8 +1965,8 @@ ${summaryText}
 4. **Actionable Roadmap**: Provide 3-5 specific, stoic, and immediately actionable steps I can take TODAY to fix weak points and accelerate my momentum.
 5. **Tone**: Be professional, analytical, objective, and highly strategic. Pretend you are advising a high-performance executive.`;
 
-                handleOpenAIAnalyst(finalPrompt);
-             }}
+              handleOpenAIAnalyst(finalPrompt);
+            }}
           />
         );
       default:
@@ -1566,20 +1984,32 @@ ${summaryText}
   return (
     <div className="flex h-screen bg-[#0d0d1a] text-slate-100 overflow-hidden font-sans">
       <style>{getThemeCSS(appState.neonTheme, appState.bgTheme)}</style>
-      <GhostAlert muted={appState.muteGhostAlerts} />
-      <ReminderAlert state={appState} hasSystemAlerts={ghostOffline && !appState.muteGhostAlerts} onNavigate={setActiveView} />
-      
+
+      {/* Conditionally hide floaters during onboarding */}
+      {appState.hasSeenWelcome && (
+        <>
+          <GhostAlert muted={appState.muteGhostAlerts} />
+          <ReminderAlert
+            state={appState}
+            hasSystemAlerts={ghostOffline && !appState.muteGhostAlerts}
+            onNavigate={setActiveView}
+          />
+        </>
+      )}
+
       {/* Mobile nav overlay */}
       {isMobileNavOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/60 z-[60] md:hidden"
           onClick={() => setIsMobileNavOpen(false)}
         />
       )}
 
       {/* 1. Left Sidebar menu */}
-      <div className={`fixed md:relative z-[70] h-full transform transition-transform duration-300 ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-        <Sidebar 
+      <div
+        className={`fixed md:relative z-[70] h-full transform transition-transform duration-300 ${isMobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+      >
+        <Sidebar
           state={appState}
           activeView={activeView}
           onNavigate={setActiveView}
@@ -1587,7 +2017,7 @@ ${summaryText}
           isSyncing={isSyncing}
           onExportJSON={handleExportJSON}
           onExportCSV={handleExportCSV}
-          hasSystemAlerts={syncCfg.lastSync === 'error' || ghostOffline}
+          hasSystemAlerts={syncCfg.lastSync === "error" || ghostOffline}
           onLoadDemo={handleLoadDemo}
         />
       </div>
@@ -1599,7 +2029,7 @@ ${summaryText}
           <h1 className="text-sm font-extrabold tracking-wider text-white">
             OMNILIFE <span className="text-[#ff6b1a]">TRACKER</span>
           </h1>
-          <button 
+          <button
             onClick={() => setIsMobileNavOpen(true)}
             className="text-slate-300 hover:text-white"
           >
@@ -1621,11 +2051,13 @@ ${summaryText}
 
       {/* 3. Global Toasts chimes notifications */}
       {toast && (
-        <div className={`fixed bottom-4 right-4 z-50 px-4 py-2 text-xs font-black rounded-lg border flex items-center gap-2 tracking-widest uppercase transition-all duration-300 font-mono shadow-[0_4px_16px_rgba(0,0,0,0.55)] ${
-          toast.type === 'ok' 
-            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-            : 'bg-[#ff6b1a]/10 text-[#ff6b1a] border-[#ff6b1a]/20'
-        }`}>
+        <div
+          className={`fixed bottom-4 right-4 z-50 px-4 py-2 text-xs font-black rounded-lg border flex items-center gap-2 tracking-widest uppercase transition-all duration-300 font-mono shadow-[0_4px_16px_rgba(0,0,0,0.55)] ${
+            toast.type === "ok"
+              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+              : "bg-[#ff6b1a]/10 text-[#ff6b1a] border-[#ff6b1a]/20"
+          }`}
+        >
           <span>// {toast.msg}</span>
         </div>
       )}
@@ -1634,45 +2066,55 @@ ${summaryText}
       {recModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl shadow-black/80">
-            <h3 className="text-sm font-extrabold tracking-widest text-[#ff6b1a] uppercase font-display">↻ REUSE / RECURRING PLANNER</h3>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider font-mono">// active element: {recItem}</p>
-            
+            <h3 className="text-sm font-extrabold tracking-widest text-[#ff6b1a] uppercase font-display">
+              ↻ REUSE / RECURRING PLANNER
+            </h3>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider font-mono">
+              // active element: {recItem}
+            </p>
+
             <div className="space-y-4 font-semibold text-slate-300">
               {/* Frequency selection buttons */}
               <div>
-                <span className="text-[9px] text-slate-500 tracking-widest block font-black uppercase mb-1.5 font-mono">RECURRING INTERVALS</span>
+                <span className="text-[9px] text-slate-500 tracking-widest block font-black uppercase mb-1.5 font-mono">
+                  RECURRING INTERVALS
+                </span>
                 <div className="grid grid-cols-2 gap-2 text-xs select-none">
-                  {(['daily', 'weekdays', 'weekends', 'custom'] as const).map(freq => (
-                    <button
-                      key={freq}
-                      onClick={() => setRecFreq(freq)}
-                      className={`py-1.5 rounded-lg border uppercase text-[10px] font-bold tracking-wider transition-all duration-200 ${
-                        recFreq === freq 
-                          ? 'bg-[#ff6b1a]/10 border-indigo-600/30 text-[#ff6b1a]' 
-                          : 'border-[#2a2a50] text-slate-400 hover:border-slate-700 hover:bg-[#111120]/30'
-                      }`}
-                    >
-                      {freq}
-                    </button>
-                  ))}
+                  {(["daily", "weekdays", "weekends", "custom"] as const).map(
+                    (freq) => (
+                      <button
+                        key={freq}
+                        onClick={() => setRecFreq(freq)}
+                        className={`py-1.5 rounded-lg border uppercase text-[10px] font-bold tracking-wider transition-all duration-200 ${
+                          recFreq === freq
+                            ? "bg-[#ff6b1a]/10 border-indigo-600/30 text-[#ff6b1a]"
+                            : "border-[#2a2a50] text-slate-400 hover:border-slate-700 hover:bg-[#111120]/30"
+                        }`}
+                      >
+                        {freq}
+                      </button>
+                    ),
+                  )}
                 </div>
               </div>
 
               {/* Custom Weekdays Picker */}
-              {recFreq === 'custom' && (
+              {recFreq === "custom" && (
                 <div className="space-y-1.5 select-none animate-fadeIn">
-                  <span className="text-[9px] text-slate-500 tracking-widest block font-black uppercase font-mono">CHOOSE RECURRENCE EVENTS</span>
+                  <span className="text-[9px] text-slate-500 tracking-widest block font-black uppercase font-mono">
+                    CHOOSE RECURRENCE EVENTS
+                  </span>
                   <div className="flex flex-wrap gap-1">
-                    {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((wd, wdIdx) => {
+                    {["M", "T", "W", "T", "F", "S", "S"].map((wd, wdIdx) => {
                       const isPicked = recDays.includes(wdIdx);
                       return (
                         <button
                           key={wdIdx}
                           onClick={() => toggleModalRecDay(wdIdx)}
                           className={`w-7 h-7 font-black text-[9px] rounded-lg border transition-all duration-200 ${
-                            isPicked 
-                              ? 'bg-[#ff6b1a] text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
-                              : 'bg-transparent border-[#2a2a50] text-slate-500 hover:border-slate-700 hover:bg-[#111120]/20'
+                            isPicked
+                              ? "bg-[#ff6b1a] text-white border-indigo-600 shadow-md shadow-indigo-600/10"
+                              : "bg-transparent border-[#2a2a50] text-slate-500 hover:border-slate-700 hover:bg-[#111120]/20"
                           }`}
                         >
                           {wd}
@@ -1692,7 +2134,9 @@ ${summaryText}
                   >
                     DISABLE
                   </button>
-                ) : <div />}
+                ) : (
+                  <div />
+                )}
 
                 <div className="flex gap-2">
                   <button
@@ -1718,27 +2162,47 @@ ${summaryText}
       {!appState.hasSeenWelcome && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl shadow-[#aa44ff]/10">
-            <h3 className="text-xl font-extrabold tracking-widest text-[#00d4ff] uppercase font-display border-b border-[#2a2a50] pb-2">Welcome to Omnilife</h3>
-            <p className="text-[10px] text-slate-400 font-bold tracking-wider font-mono">// ARCHITECTURE & PRIVACY</p>
-            
+            <h3 className="text-xl font-extrabold tracking-widest text-[#00d4ff] uppercase font-display border-b border-[#2a2a50] pb-2">
+              Welcome to Omnilife
+            </h3>
+            <p className="text-[10px] text-slate-400 font-bold tracking-wider font-mono">
+              // ARCHITECTURE & PRIVACY
+            </p>
+
             <div className="space-y-4 font-semibold text-slate-300 text-sm leading-relaxed max-h-[60vh] overflow-y-auto scrollbar-none">
               <p>
-                <strong>100% Local & Private:</strong> This application has no backend. All your logs, tracking, and sketches are stored purely inside your browser memory locally or directly backed up to a .json file on your local hard drive. You are in complete control of your data.
+                <strong>Uncompromising Privacy & Total Control:</strong> This is
+                the ultimate life tracker app. Unlike other apps where you have
+                zero privacy or control over your data, Omnilife gives you total
+                ownership. Your data never touches our servers—because there are
+                none. All your logs, tracking, and routines are stored purely
+                inside your browser memory or directly backed up to a .json file
+                on your local hard drive.
               </p>
               <p>
-                <strong>Export & Backup:</strong> Because there is no cloud database, you can use the "Export JSON" option at the bottom of the sidebar at any time. Keep this file safe. If you clear your browser cache, you can "Import JSON" to instantly restore everything.
+                <strong>Export & Backup:</strong> Because there is no cloud
+                database, you can use the "Export JSON" option at the bottom of
+                the sidebar at any time. Keep this file safe. If you clear your
+                browser cache, you can "Import JSON" to instantly restore
+                everything.
               </p>
               <p>
-                <strong>Ghost Sync:</strong> (Recommended) Found in Settings, this feature utilizes the File System Access API. It links exactly <i>one</i> local .json file and automatically overwrites it in the background as you click items, offering zero-touch local-first syncing without standard cloud privacy vulnerabilities.
+                <strong>Ghost Sync:</strong> (Recommended) Found in Settings,
+                this feature utilizes the File System Access API. It links
+                exactly <i>one</i> local .json file and automatically overwrites
+                it in the background as you click items, offering zero-touch
+                local-first syncing.
               </p>
               <p>
-                <strong>AI Assist:</strong> Across the app (and specifically in the Help section), look for the AI Assist buttons (GPT, Claude, Gemini). When you click them, the system copies a perfectly formatted data snapshot and software context into your clipboard. Paste it into your favorite AI to get tailored advice, schedule generation, or bug fixes.
+                <strong>Themes & AI:</strong> Personalize your experience with
+                multi-style themes on your dashboard (Retro, Minimalistic, Soft
+                & Cute). Plus, all data can be perfectly copied to your
+                clipboard to use with any AI for analysis, ensuring your data
+                never gets sent securely unless YOU send it.
               </p>
-              <p>
-                Enjoy planning your expeditions, tracking your local finances, and auditing your goals in absolute security!
-              </p>
+              <p>Enjoy tracking your daily routines in absolute security!</p>
             </div>
-            
+
             <div className="pt-4 flex justify-end">
               <button
                 onClick={() => {
@@ -1755,24 +2219,50 @@ ${summaryText}
         </div>
       )}
 
-      {/* Floating global AI Assist Action */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <button onClick={handleOpenAIAnalyst} className="flex items-center justify-center gap-2 px-4 py-3 bg-[#111120] border border-[#2a2a50] rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.8)] hover:border-[#00ff88] text-[#00ff88] transition-all duration-300 backdrop-blur-md">
-          <Bot size={18} />
-          <span className="text-[10px] font-black uppercase tracking-widest leading-none">AI Analyst</span>
-        </button>
-      </div>
+      {/* Floating global Actions */}
+      {appState.hasSeenWelcome && (
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+          {!appState.hideGuideFloater && (
+            <button
+              onClick={() => setGuideModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-[#111120] border border-[#2a2a50] rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.8)] hover:border-[#00d4ff] text-[#00d4ff] transition-all duration-300 backdrop-blur-md"
+            >
+              <Info size={18} />
+              <span className="text-[10px] font-black uppercase tracking-widest leading-none">
+                Module Guide
+              </span>
+            </button>
+          )}
+          <button
+            onClick={handleOpenAIAnalyst}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-[#111120] border border-[#2a2a50] rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.8)] hover:border-[#00ff88] text-[#00ff88] transition-all duration-300 backdrop-blur-md"
+          >
+            <Bot size={18} />
+            <span className="text-[10px] font-black uppercase tracking-widest leading-none">
+              AI Analyst
+            </span>
+          </button>
+        </div>
+      )}
+
+      <StepByStepGuideModal
+        isOpen={guideModalOpen}
+        onClose={() => setGuideModalOpen(false)}
+        activeView={activeView}
+        onHideFloater={() => {
+          setAppState((prev) => ({ ...prev, hideGuideFloater: true }));
+        }}
+      />
 
       {/* AI Analyst Modal */}
       {aiModal.isOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[80] animate-fade-in text-center">
           <div className="bg-[#111120] relative border border-[#00ff88]/30 rounded-2xl max-w-sm w-full p-6 space-y-6 shadow-2xl shadow-[#00ff88]/10 flex flex-col items-center">
-            
             <button
-               onClick={() => setAiModal({ isOpen: false, promptText: '' })}
-               className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-[#2a2a50]/50 hover:bg-[#2a2a50] text-slate-400 hover:text-white transition"
+              onClick={() => setAiModal({ isOpen: false, promptText: "" })}
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-[#2a2a50]/50 hover:bg-[#2a2a50] text-slate-400 hover:text-white transition"
             >
-               <X size={16} />
+              <X size={16} />
             </button>
 
             <div className="mx-auto w-16 h-16 bg-[#00ff88]/10 text-[#00ff88] rounded-full flex items-center justify-center animate-pulse">
@@ -1780,40 +2270,68 @@ ${summaryText}
             </div>
 
             <div>
-              <h3 className="text-xl font-extrabold tracking-widest text-[#00ff88] uppercase font-display">AI Context Hub</h3>
+              <h3 className="text-xl font-extrabold tracking-widest text-[#00ff88] uppercase font-display">
+                AI Context Hub
+              </h3>
               <div className="mt-4 p-3 bg-[#0a0a14] border border-[#2a2a50] rounded-xl text-left space-y-2">
-                 <p className="text-[10px] text-[#00ff88] font-black tracking-widest uppercase mb-1 flex items-center gap-2">
-                   <CheckCircle2 size={12} /> Instructions Compiled
-                 </p>
-                 <p className="text-[10px] text-slate-300 leading-relaxed font-mono">
-                   Your private data and detailed AI instructions are ready. 
-                 </p>
-                 <div className="bg-[#00ff88]/10 text-[#00ff88] p-2 rounded text-[10px] font-bold border border-[#00ff88]/20">
-                   <strong>PURPOSE:</strong> This data package helps you analyze your life metrics with your preferred AI, acting as your personalized executive assistant.
-                 </div>
-                 <ul className="text-[10px] text-[#00d4ff] font-bold list-disc pl-3 mt-1 space-y-0.5">
-                    <li>Click any option below to copy the data.</li>
-                    <li>Go to the AI tab and <strong>paste it</strong> (Ctrl+V/Cmd+V).</li>
-                    <li>Start asking your AI any queries!</li>
-                    <li>The data can be pasted into <strong>ANY AI</strong> of your choice.</li>
-                 </ul>
+                <p className="text-[10px] text-[#00ff88] font-black tracking-widest uppercase mb-1 flex items-center gap-2">
+                  <CheckCircle2 size={12} /> Instructions Compiled
+                </p>
+                <p className="text-[10px] text-slate-300 leading-relaxed font-mono">
+                  Your private data and detailed AI instructions are ready.
+                </p>
+                <div className="bg-[#00ff88]/10 text-[#00ff88] p-2 rounded text-[10px] font-bold border border-[#00ff88]/20">
+                  <strong>PURPOSE:</strong> This data package helps you analyze
+                  your life metrics with your preferred AI, acting as your
+                  personalized executive assistant.
+                </div>
+                <ul className="text-[10px] text-[#00d4ff] font-bold list-disc pl-3 mt-1 space-y-0.5">
+                  <li>Click any option below to copy the data.</li>
+                  <li>
+                    Go to the AI tab and <strong>paste it</strong>{" "}
+                    (Ctrl+V/Cmd+V).
+                  </li>
+                  <li>Start asking your AI any queries!</li>
+                  <li>
+                    The data can be pasted into <strong>ANY AI</strong> of your
+                    choice.
+                  </li>
+                </ul>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-3 w-full">
               {[
-                { name: 'ChatGPT', url: 'https://chatgpt.com', color: '#00d4ff' },
-                { name: 'Claude', url: 'https://claude.ai/new', color: '#ffaa44' },
-                { name: 'Gemini', url: 'https://gemini.google.com/app', color: '#00ff88' },
-                { name: 'Perplexity', url: 'https://www.perplexity.ai/', color: '#ff6b1a' }
-              ].map(ai => (
+                {
+                  name: "ChatGPT",
+                  url: "https://chatgpt.com",
+                  color: "#00d4ff",
+                },
+                {
+                  name: "Claude",
+                  url: "https://claude.ai/new",
+                  color: "#ffaa44",
+                },
+                {
+                  name: "Gemini",
+                  url: "https://gemini.google.com/app",
+                  color: "#00ff88",
+                },
+                {
+                  name: "Perplexity",
+                  url: "https://www.perplexity.ai/",
+                  color: "#ff6b1a",
+                },
+              ].map((ai) => (
                 <button
                   key={ai.name}
                   onClick={() => {
-                    navigator.clipboard.writeText(aiModal.promptText).then(() => {
-                      window.open(ai.url, '_blank');
-                      setAiModal({ isOpen: false, promptText: '' });
-                    });
+                    navigator.clipboard
+                      .writeText(aiModal.promptText)
+                      .then(() => {
+                        window.open(ai.url, "_blank");
+                        setAiModal({ isOpen: false, promptText: "" });
+                      });
                   }}
                   className="px-2 py-3 bg-[#0d0d1a] border border-[#2a2a50] hover:bg-[#1a1a30] transition rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5"
                   style={{ color: ai.color }}
@@ -1825,26 +2343,33 @@ ${summaryText}
 
             <div className="w-full pt-3 border-t border-[#2a2a50] space-y-2">
               <div className="text-center mb-2">
-                <p className="text-[9px] text-[#00d4ff] uppercase tracking-widest font-black mb-1">Use ANY Other AI</p>
+                <p className="text-[9px] text-[#00d4ff] uppercase tracking-widest font-black mb-1">
+                  Use ANY Other AI
+                </p>
                 <p className="text-[9px] text-slate-400 font-medium leading-relaxed px-4">
-                  The copied data contains exhaustive instructions, data dictionaries, and your active data. Paste it into any AI to kickstart advanced analysis.
+                  The copied data contains exhaustive instructions, data
+                  dictionaries, and your active data. Paste it into any AI to
+                  kickstart advanced analysis.
                 </p>
               </div>
               <button
-                 onClick={() => {
-                   navigator.clipboard.writeText(aiModal.promptText).then(() => {
-                     setToast({ msg: "Copied! You can paste this in ANY AI.", type: "ok" });
-                     setAiModal({ isOpen: false, promptText: '' });
-                   });
-                 }}
-                 className="w-full py-3 bg-[#aa44ff]/10 hover:bg-[#aa44ff]/20 border border-[#aa44ff]/30 text-[#aa44ff] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 rounded-xl transition shadow-[0_4px_15px_rgba(170,68,255,0.2)]"
+                onClick={() => {
+                  navigator.clipboard.writeText(aiModal.promptText).then(() => {
+                    setToast({
+                      msg: "Copied! You can paste this in ANY AI.",
+                      type: "ok",
+                    });
+                    setAiModal({ isOpen: false, promptText: "" });
+                  });
+                }}
+                className="w-full py-3 bg-[#aa44ff]/10 hover:bg-[#aa44ff]/20 border border-[#aa44ff]/30 text-[#aa44ff] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 rounded-xl transition shadow-[0_4px_15px_rgba(170,68,255,0.2)]"
               >
                 <ClipboardCopy size={16} /> Copy Full Prompt & Data Package
               </button>
             </div>
 
-            <button 
-              onClick={() => setAiModal({ isOpen: false, promptText: '' })}
+            <button
+              onClick={() => setAiModal({ isOpen: false, promptText: "" })}
               className="mt-4 text-slate-400 hover:text-white uppercase tracking-widest text-[11px] font-black transition flex items-center justify-center gap-2 w-full bg-[#2a2a50] hover:bg-rose-500 py-3 rounded-xl shadow-lg border border-[#2a2a50]"
             >
               <X size={16} /> Close & Go Back
@@ -1853,8 +2378,12 @@ ${summaryText}
         </div>
       )}
 
-      {showOnboarding && <OnboardingModal viewId={activeView} onDismiss={handleDismissOnboarding} />}
-    
+      {showOnboarding && (
+        <OnboardingModal
+          viewId={activeView}
+          onDismiss={handleDismissOnboarding}
+        />
+      )}
     </div>
   );
 }
