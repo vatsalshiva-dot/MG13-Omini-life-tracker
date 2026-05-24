@@ -11,9 +11,9 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ viewId, onDism
     dashboard: {
       title: 'Welcome to Dashboard',
       steps: [
-        'Here you can view a quick summary of your day.',
-        'See your active streak and progression metrics.',
-        'Quickly jump to the Daily Tracker for more details.'
+        'Here you can view a quick summary of your day with premium custom quotes. Hide the banner for extreme space, and restore it instantly with the glowing button.',
+        'Monitor true climate with the Bio-Climate Control Desk, pulling live real-time temp, condition, AQI, and wind telemetry via GPS or custom search locations.',
+        'View streak counters, overall average progress indicators, and jump to other views instantly.'
       ]
     },
     daily: {

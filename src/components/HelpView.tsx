@@ -26,9 +26,11 @@ Omnilife Tracker is a 100% local, offline-first application designed for unparal
 11. **Synopsis & Share:** Selects a date range, scrapes all notes, sketches, and metrics, and compiles it into markdown formats.
 12. **Search Directory:** Global deep text search spanning across historical journal logs, tasks, and financial memos.
 13. **Focus Audio:** Ambient environment soundscapes (e.g. rain, brown noise, cafe) to assist in deep focus, controlled directly via the main navigation menu.
+14. **Bio-Climate & Indoor/Outdoor Environment Desk:** Real-time environmental tracking console on the dashboard. Monitors live weather conditions, wind speed, UV, and Air Quality (AQI) telemetry fetched in real-time by geolocating simulated presets or querying actual GPS coordinates worldwide via the search-coordinate deploy tool. Also tracks Indoor Air Biome conditions (indoor temperature, comfort thresholds, CO2 levels, and active air purifier modes eco/boost). Use these ecological dynamics to optimize focus and habit compliance.
+15. **Visual Themes, Custom Stickers & Quotes Engines:** Includes 22 advanced visual presets (midnight, superhero, teens, swiss, retro, minimal, cute, playful, crimson, hacker, forest, luxury, cyberpunk, milkyway, ocean, cars, sports, wildwest, futuristic, proper3d, proper2d, mafia) styled with distinctive color tones, typographic matching engines, and distinct situational quotes, live banners, and animated stickers. If closed to conserve vertical workspace density, the banner can be restored instantly via the glowing green 'Restore Quote Banner' button.
 
 **Your Ongoing AI Role:**
-Whenever I provide data outputs from Omnilife Tracker or ask you a question in this context, use your mastery of these 12 modules to assist me. Your guidance MUST adhere to the app's structural constraints (e.g. knowing it's offline-first, knowing how alerts trigger). 
+Whenever I provide data outputs from Omnilife Tracker or ask you a question in this context, use your mastery of these 15 modules to assist me. Your guidance MUST adhere to the app's structural constraints (e.g. knowing it's offline-first, knowing how climate comfort levels score, knowing how alerts trigger). 
 - Help me design life schedules.
 - Guide me in utilizing specific modules for my use-case.
 - Perform deep-dive analysis on any metrics or journal logs I provide.
@@ -55,8 +57,8 @@ Whenever I provide data outputs from Omnilife Tracker or ask you a question in t
                <Bot size={24} />
              </div>
              <div>
-               <h3 className="font-extrabold text-xl font-display text-white tracking-widest uppercase">Learn step by step how to use this app with the help of AI</h3>
-               <p className="text-[10px] font-black uppercase text-[#00d4ff] tracking-widest mt-1">AI Analyst Instruction Manual Loading...</p>
+               <h3 className="font-extrabold text-xl font-display text-white tracking-widest uppercase">TUTORIAL: LEARN STEP BY STEP HOW TO USE THIS APP WITH THE HELP OF AI</h3>
+               <p className="text-[10px] font-black uppercase text-[#00d4ff] tracking-widest mt-1">Interactive Step-by-Step AI Companion Manual & Tutorial Hub</p>
              </div>
           </div>
           

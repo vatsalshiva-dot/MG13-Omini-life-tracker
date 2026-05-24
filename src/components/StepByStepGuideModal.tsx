@@ -36,171 +36,179 @@ export const StepByStepGuideModal: React.FC<GuideProps> = ({
     { title: string; steps: { title: string; desc: string }[] }
   > = {
     dashboard: {
-      title: "Dashboard Guide",
+      title: "Dashboard Walkthrough",
       steps: [
         {
-          title: "Step 1: Daily Overview",
-          desc: "This is your command center. You can see active streaks, energy levels, and overall session stats for the day. Think of it as a birds-eye view of your life.",
+          title: "Step 1: Daily Overview Bento Grid",
+          desc: "👉 LOCATE: Look at the horizontal grid of 7 sleek cards right below the header. The first card shows your 'DONE' percentage, and the next ones hold stats like total focused hours and overall satisfaction scores. These update instantly as you check tasks!",
         },
         {
-          title: "Step 2: Themes & Styles",
-          desc: "Use the UI Themes & Styles section to change your aesthetic. Click on 'Pop Art Retro', 'Minimal Light', or 'Default Modern' to instantly change the vibe of the entire app.",
+          title: "Step 2: Top Collapsible Aesthetics Bar",
+          desc: "👉 LOCATE: Tap on the '🎨 Theme & Accent Customizer' drawer header located at the very top of your dashboard. Clicking will slide open a compact selection shelf containing custom UI configurations.",
         },
         {
-          title: "Step 3: Neon Accents",
-          desc: "Right below the themes, you can select your accent color. These apply glowing effects to active elements throughout the system.",
+          title: "Step 3: Ambient Quotes & Theme Stickers",
+          desc: "👉 LOCATE: Observe the visual banner just above the viewport modules. Every structural theme displays custom styled stickers, symbols, and targeted mantras. You can close this banner for space, and restore it anytime using the glowing green 'Restore Quote' action button.",
         },
         {
-          title: "Step 4: Streak Tracking",
-          desc: "Your streaks are displayed here. They increase automatically as you complete daily habits over consecutive days in the 'Daily Tracker'. Miss a day, and the streak resets to zero automatically.",
+          title: "Step 4: Bio-Climate & Environment Control Desk",
+          desc: "👉 LOCATE: Find the large 'Bio-Climate Desk' dashboard element. Switch outdoor station overlays or use the 'Search Location' option to query and deploy live real-time weather, AQI, and wind telemetry from actual GPS coordinates worldwide.",
+        },
+        {
+          title: "Step 5: Active Habits Streaks",
+          desc: "👉 LOCATE: Look at the vertical widgets in the center list. Hot-pink Fire icons highlight your consecutive daily win streaks. They increase automatically when you mark routines done day after day.",
         },
       ],
     },
     daily: {
-      title: "Daily Tracker Guide",
+      title: "Daily Tracker Walkthrough",
       steps: [
         {
-          title: "Step 1: Date Navigation",
-          desc: "At the very top, use the left/right arrows to change the date you are viewing. You can track past days or plan for future days. Click 'Go to Today' to snap back.",
+          title: "Step 1: Top Navigation Bar",
+          desc: "👉 LOCATE: Find the horizontal header widget at the very top. Use the pointing arrow buttons (◀ and ▶) to step through dates, or click the orange 'TODAY' badge to snap back to the current date.",
         },
         {
-          title: "Step 2: Category Switching",
-          desc: "Below the date, you'll see tabs for 'Habits', 'Leisure', and 'Custom'. Click these to split your tasks into logical chunks and keep your view clean.",
+          title: "Step 2: Category Switches (Middle Tabs)",
+          desc: "👉 LOCATE: Find the horizontal tab panel underneath the date header. Switch between 'Habits', 'Leisure', and 'Custom' routines to keep your focus blocks clean and tidy.",
         },
         {
-          title: "Step 3: Quick Task Tracking",
-          desc: "Just click somewhere on a task row to easily toggle its state between 'done' and 'skip'. If it's done, you can tap it again to set a satisfaction score or custom notes.",
+          title: "Step 3: Direct Routine Toggles",
+          desc: "👉 LOCATE: Look at the rows inside the main central list. Click directly on any routine row to cycle its state (PENDING 🟡 → DONE 🟢 → MISSED 🔴 → SKIPPED ⚪). This is your primary logging action!",
         },
         {
-          title: "Step 4: Adding New Tasks",
-          desc: "Click the smaller + button at the top right of each category section (right next to the category title). Type the name and press Enter to add a new task for that day.",
+          title: "Step 4: Add Routines (+ Inline Trigger)",
+          desc: "👉 LOCATE: Look closely at the category section headers. Click the small round plus icon (+ button) situated on the outer right edge of each category container to add a new task item on the fly.",
         },
       ],
     },
     journal: {
-      title: "Journal Guide",
+      title: "Interactive Journal Walkthrough",
       steps: [
         {
-          title: "Step 1: Setting Mood & Energy",
-          desc: "Start your journal entry by clicking the mood emojis and energy icons at the top to set a quick emotional baseline for the day.",
+          title: "Step 1: Mood & Energy Smiley Gauges",
+          desc: "👉 LOCATE: At the very top of the journal desk, you'll see two rows of grid buttons with smiles and batteries. Tap them to record your emotional and vitality balance for the current day.",
         },
         {
-          title: "Step 2: Freeform Notes",
-          desc: "Use the large text area below to brain-dump your thoughts. Changes save automatically as you type, so you don't need to look for a save button.",
+          title: "Step 2: Custom reflection Prompt boxes",
+          desc: "👉 LOCATE: Look at the main inputs in the middle column. Type your thoughts directly in these panels — they save automatically in the background as you write!",
         },
         {
-          title: "Step 3: Applying Tags",
-          desc: "Under the text area, type a word like 'Reflective' or 'Anxious' and hit Enter to add tags. This helps you categorize entries for the AI Analyst to review later.",
+          title: "Step 3: Multi Tag selection panel",
+          desc: "👉 LOCATE: Look at the bottom-right sidebar. Under 'Journal Tags', find the tag cloud or use the input bar to create custom markers (e.g. 'FOCUS', 'ROUGH') to group daily logs.",
+        },
+        {
+          title: "Step 4: Connected Canvas Sketches",
+          desc: "👉 LOCATE: Look at the bottom of the middle desk. Below the text boxes, click 'Sketch' to open an inline scribble box, or navigate to the main Sketchpad PRO tab to attach professional schematics directly into these sections!",
         },
       ],
     },
     goals: {
-      title: "Goals & Targets Guide",
+      title: "Goals & Target Walkthrough",
       steps: [
         {
-          title: "Step 1: Choosing a Timeline",
-          desc: "Switch between the Weekly, Monthly, Yearly, or Lifetime tabs at the top to see different horizons for your goals.",
+          title: "Step 1: Horizon Selector Tabs",
+          desc: "👉 LOCATE: Find the prominent tab bar at the high top header. Switch cleanly between Weekly, Monthly, and Yearly horizons to inspect different milestones.",
         },
         {
-          title: "Step 2: Setting Target Reps",
-          desc: "Each goal has a numerical counter. Click this number to set how many times you want to complete a specific task in this timeframe (e.g., 5 times a week).",
+          title: "Step 2: Repetitions Target Counters",
+          desc: "👉 LOCATE: Look at the 'TARGET REPS' column on the grid view. Use the number controls to dictate how many times you plan to complete that habit in your active schedule framework.",
         },
         {
-          title: "Step 3: Setting Target Hours",
-          desc: "Click the clock icon and number next to it if you want to aim for a certain amount of hours spent on the given task, rather than just repetitions.",
+          title: "Step 3: Hour Duration Goals",
+          desc: "👉 LOCATE: Look next to the target reps. The clock icons let you specify minimum spent hour targets (e.g., 10 hours of study) for high-value routines.",
         },
         {
-          title: "Step 4: Manual vs Auto-Sync",
-          desc: "If you adjust a goal manually, its number turns 'blue', meaning it is detached from auto-calculation. You can click 'reset' on it to revert it back to auto-tracking from your Daily Tracker.",
+          title: "Step 4: Blue Lock Indicators",
+          desc: "👉 LOCATE: When you manually customize goal counters, they turn neon blue with a lock badge. This means they are frozen. Press the 'Reset' button adjacent to them to snap back to automatic calculations derived from daily logs.",
         },
       ],
     },
     finances: {
-      title: "Finance Tracker Guide",
+      title: "Finance Tracker Walkthrough",
       steps: [
         {
-          title: "Step 1: Adding Accounts",
-          desc: "First, set up your checking, savings, or investment accounts utilizing the '+ New Account' button. Note that each starts with its own balance.",
+          title: "Step 1: Accounts Registry",
+          desc: "👉 LOCATE: Look at the left sidebar. Press the '+ New Account' action button to trigger a form, letting you set up safe checking, ledger, or asset balances.",
         },
         {
-          title: "Step 2: Logging Transactions",
-          desc: "Click inside an account to view details. Then click 'Add Transaction' to record income or expenses. They will automatically affect the linked account balance.",
+          title: "Step 2: Ledger Transaction Entry",
+          desc: "👉 LOCATE: Inside the details panel of any active account, press the 'Add Transaction' button at the top header to log new debits or credit inputs.",
         },
         {
-          title: "Step 3: Managing Financial Tasks",
-          desc: "Create tasks like 'Pay Bills' or 'Audit Taxes' right inside the finances tab using the 'Tasks' section to keep money-chores centralized.",
+          title: "Step 3: Due Money Tasks",
+          desc: "👉 LOCATE: On the lower row, the 'Financial Tasks' checklist lets you catalog chores like tax filing or audits. Check off items with their simple inline triggers.",
+        },
+        {
+          title: "Step 4: Bill Alerts & Reminders",
+          desc: "👉 LOCATE: Press the small bell icon next to any account or transaction row. This triggers a calendar pop-up configuration to schedule automatic bill alerts.",
         },
       ],
     },
     expeditions: {
-      title: "Expeditions Guide",
+      title: "Expedition Walkthrough",
       steps: [
         {
-          title: "Step 1: Planning a New Trip",
-          desc: "Click 'Plan New Expedition' to create a new trip container. Give it a title and select dates.",
+          title: "Step 1: Plan Expedition Trigger",
+          desc: "👉 LOCATE: Find the main green-accent button at the top header labeled 'Plan New Expedition'. Tap it to set up a trip name, dates, and destination.",
         },
         {
-          title: "Step 2: Setting the Itinerary",
-          desc: "Add specific locations and descriptions to the expedition. This acts as your high-level travel context and itinerary.",
+          title: "Step 2: Pack Lists & Checklists",
+          desc: "👉 LOCATE: Click to expand any active trip card. Look at the lower half of the expanded card where checkmark sliders let you pack gear items and tick off travel tasks systematically.",
         },
         {
-          title: "Step 3: Packing Lists",
-          desc: "Click on a created expedition to expand it. Here you can list out your packing requirements. Check them off as you place them in your bag.",
-        },
-        {
-          title: "Step 4: Travel Tasks",
-          desc: "Add travel-specific sub-tasks (like 'buy tickets' or 'print visas') and check them off securely before you go.",
+          title: "Step 3: Alert Alarm Bell",
+          desc: "👉 LOCATE: Inside the expanded expedition card header, locate the grey bell icon next to the trip name. Click it to place automatic flight reminders onto your global alerts list.",
         },
       ],
     },
     pomo: {
-      title: "Pomodoro Timer Guide",
+      title: "Focus Walkthrough",
       steps: [
         {
-          title: "Step 1: Selecting a Task",
-          desc: "First, select a task you want to focus on from the dropdown, or just use the generic focus timer.",
+          title: "Step 1: Routine Selector",
+          desc: "👉 LOCATE: Look at the left dropdown selector in the central focus box. Choose which active regular study habit you want to map this session to.",
         },
         {
-          title: "Step 2: Setting the Timer",
-          desc: "Use the presets (25, 45, or 60 minutes) for quick setups. The required break time automatically adjusts proportionally.",
+          title: "Step 2: Duration Presets",
+          desc: "👉 LOCATE: Direct your eyes to the three numeric buttons (25, 45, and 60 mins) right above the timer circles. Click these for rapid configuration setups.",
         },
         {
-          title: "Step 3: Focus Audio Integration",
-          desc: "You can toggle audio tracks (Brown noise, Rain, Cyber) below the timer. These will automatically play ambient sound during your work sessions and mute during breaks.",
+          title: "Step 3: Ambient Synthesizer Rails",
+          desc: "👉 LOCATE: Look at the audio selector rail below the countdown clock. Select 'Cybernetic Rain' or 'Brownian Noise' to trigger our inline real-time synthesizers.",
         },
         {
-          title: "Step 4: Starting the Session",
-          desc: "Click the big 'START' button to begin focusing. The timer will take over your screen visually to minimize distractions.",
+          title: "Step 4: Center Start Glow Orb",
+          desc: "👉 LOCATE: Press the main glowing central start icon to activate deep focus mode. The dashboard will dim, leaving only active countdown tracking visible.",
         },
       ],
     },
     reminders: {
-      title: "Reminders Guide",
+      title: "Reminders Walkthrough",
       steps: [
         {
-          title: "Step 1: Adding Reminders",
-          desc: "Click 'New Reminder'. Set the title, specify the exact due date, and choose an optional time.",
+          title: "Step 1: New Alert creation",
+          desc: "👉 LOCATE: Look at the outer right section of the header toolbar. Click the green 'New Reminder' button to set custom date-times and flags.",
         },
         {
-          title: "Step 2: Priority Flags",
-          desc: "When creating a reminder, flag it as high priority if needed. High priority alerts show up visually differently across the app.",
+          title: "Step 2: Priority Badges",
+          desc: "👉 LOCATE: High-priority alarms will render with orange exclamation glow tags on the daily alerts feed, warning you of impending deadlines.",
         },
       ],
     },
     settings: {
-      title: "Settings Guide",
+      title: "Settings Walkthrough",
       steps: [
         {
-          title: "Step 1: Data Backup (Export)",
-          desc: "Because Omnilife is 100% private, there is no cloud! You must secure your own data. Click 'Export JSON' to download a backup of everything.",
+          title: "Step 1: Secure JSON Backup",
+          desc: "👉 LOCATE: Look at the left column panels. Tap the grey 'Export JSON' button to save a copy of your private browser database onto your local hard drive.",
         },
         {
-          title: "Step 2: Restoring Data",
-          desc: "If you change browsers or clear cache, just click 'Import JSON' and supply your saved backup to instantly restore everything to exactly how it was.",
+          title: "Step 2: Restore Import Button",
+          desc: "👉 LOCATE: Click the 'Import JSON' file-uploader adjacent to the exporter to pick any old backup file to instantly re-populate all tracking states.",
         },
         {
-          title: "Step 3: Enabling Ghost Sync",
-          desc: "Ghost Sync uses standard File System Access. Click it, select your JSON backup file on your local hard drive, and the app will continuously save your clicks automatically in the background.",
+          title: "Step 3: Ghost Continuous Sync",
+          desc: "👉 LOCATE: Find the blue disk icon labeled 'Ghost Sync' in the center grid. Activate this to securely link a local folder for real-time background file writes.",
         },
       ],
     },
@@ -311,6 +319,18 @@ export const StepByStepGuideModal: React.FC<GuideProps> = ({
               Hide Floater
             </button>
           )}
+        </div>
+
+        <div className="mt-5 pt-4 border-t border-[#2a2a50]/60 space-y-3">
+          <p className="text-[10px] text-slate-400 font-medium text-center leading-relaxed">
+            ℹ️ <span className="text-[#00ff88] font-bold">Quick Tech:</span> You can always access or re-open these detailed interactive module guides from the Sidebar under <span className="text-[#00d4ff] font-bold">"Module Guides"</span> or in the <span className="text-[#00ff88] font-bold">"Help & Info"</span> tab!
+          </p>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white uppercase tracking-widest text-[11px] font-black transition flex items-center justify-center gap-2 w-full bg-[#2a2a50] hover:bg-rose-500 py-3 rounded-xl shadow-lg border border-[#2a2a50]"
+          >
+            <X size={16} /> Close Walkthrough
+          </button>
         </div>
       </div>
     </div>

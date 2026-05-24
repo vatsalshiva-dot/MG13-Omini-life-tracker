@@ -24,43 +24,135 @@ import {
 } from "./utils/storage";
 import { todayStr, periodRange } from "./utils/date";
 
-const getThemeCSS = (colorHex?: string, bgTheme?: string) => {
+export const ALL_FONTS = [
+  { id: "inter", label: "Inter (Neo-Grotesque)", family: '"Inter", sans-serif' },
+  { id: "space_grotesk", label: "Space Grotesk (Tech Future)", family: '"Space Grotesk", sans-serif' },
+  { id: "jetbrains_mono", label: "JetBrains Mono (Sleek Hacker)", family: '"JetBrains Mono", monospace' },
+  { id: "fira_code", label: "Fira Code (Modern Coding)", family: '"Fira Code", monospace' },
+  { id: "vt323", label: "VT323 (8-Bit Arcade)", family: '"VT323", monospace' },
+  { id: "quicksand", label: "Quicksand (Friendly Curves)", family: '"Quicksand", sans-serif' },
+  { id: "playfair_display", label: "Playfair Display (Classy Editorial)", family: '"Playfair Display", serif' },
+  { id: "outfit", label: "Outfit (Geometric Clean)", family: '"Outfit", sans-serif' },
+  { id: "cabin_sketch", label: "Cabin Sketch (Creative Doodle)", family: '"Cabin Sketch", cursive' },
+  { id: "bebas_neue", label: "Bebas Neue (Punchy Banner)", family: '"Bebas Neue", sans-serif' },
+  { id: "cinzel", label: "Cinzel (Ancient Majesty)", family: '"Cinzel", serif' },
+  { id: "syne", label: "Syne (Avant-Garde Art)", family: '"Syne", sans-serif' },
+  { id: "fredoka", label: "Fredoka (Playful Rounded)", family: '"Fredoka", sans-serif' },
+  { id: "unbounded", label: "Unbounded (Heavy Brutalist)", family: '"Unbounded", sans-serif' },
+  { id: "inconsolata", label: "Inconsolata (Humanist Code)", family: '"Inconsolata", monospace' },
+  { id: "montserrat", label: "Montserrat (Urban Classic)", family: '"Montserrat", sans-serif' },
+  { id: "cardo", label: "Cardo (Ancient Scholarly)", family: '"Cardo", serif' },
+  { id: "righteous", label: "Righteous (Retro Cyberwave)", family: '"Righteous", sans-serif' },
+  { id: "dm_serif", label: "DM Serif (Vogue Editorial)", family: '"DM Serif Display", serif' },
+  { id: "press_start", label: "Press Start 2P (Geek Chiptune)", family: '"Press Start 2P", monospace' }
+];
+
+const getThemeCSS = (colorHex?: string, bgTheme?: string, fontFamily?: string) => {
   let cssStr = "";
 
-  if (colorHex && colorHex !== "#ff6b1a") {
+  let derivedTextHex = colorHex || "#ff6b1a";
+  let derivedBgTextHex = "#ffffff";
+  let r = 255, g = 107, b = 26; // Default to #ff6b1a
+  
+  if (colorHex) {
     const hex = colorHex.replace("#", "");
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-    const rgb = `${r}, ${g}, ${b}`;
+    r = parseInt(hex.substring(0, 2), 16);
+    g = parseInt(hex.substring(2, 4), 16);
+    b = parseInt(hex.substring(4, 6), 16);
+    const yiq = ((r*299)+(g*587)+(b*114))/1000;
+    
+    derivedBgTextHex = yiq > 140 ? "#0f172a" : "#ffffff";
+    const isLightBg = ["swiss", "retro", "minimal", "cute", "playful", "proper3d", "proper2d"].includes(bgTheme || "");
+    
+    if (isLightBg) {
+      // For light backgrounds, always guarantee deep high-contrast text by scaling down color luminosity
+      const factor = yiq > 200 ? 0.35 : yiq > 140 ? 0.5 : 0.65;
+      const nr = Math.floor(r * factor);
+      const ng = Math.floor(g * factor);
+      const nb = Math.floor(b * factor);
+      const toHex = (c: number) => {
+        const s = Math.max(0, Math.min(255, c)).toString(16);
+        return s.length === 1 ? "0" + s : s;
+      };
+      derivedTextHex = `#${toHex(nr)}${toHex(ng)}${toHex(nb)}`;
+    } else {
+      // For dark backgrounds, always guarantee bright luminous high-contrast text by scaling up color luminosity
+      const factor = yiq < 90 ? 1.8 : yiq < 150 ? 1.3 : 1.1;
+      const nr = Math.min(255, Math.floor(r * factor + (255 - r) * 0.25));
+      const ng = Math.min(255, Math.floor(g * factor + (255 - g) * 0.25));
+      const nb = Math.min(255, Math.floor(b * factor + (255 - b) * 0.25));
+      const toHex = (c: number) => {
+        const s = Math.max(0, Math.min(255, c)).toString(16);
+        return s.length === 1 ? "0" + s : s;
+      };
+      derivedTextHex = `#${toHex(nr)}${toHex(ng)}${toHex(nb)}`;
+    }
+  }
 
-    cssStr += `
-      .text-\\[\\#ff6b1a\\] { color: ${colorHex} !important; }
-      .bg-\\[\\#ff6b1a\\] { background-color: ${colorHex} !important; }
-      .bg-\\[\\#ff6b1a\\]\\/10 { background-color: rgba(${rgb}, 0.1) !important; }
-      .bg-\\[\\#ff6b1a\\]\\/30 { background-color: rgba(${rgb}, 0.3) !important; }
-      .bg-\\[\\#ff6b1a\\]\\/50 { background-color: rgba(${rgb}, 0.5) !important; }
-      .border-\\[\\#ff6b1a\\] { border-color: ${colorHex} !important; }
-      .border-\\[\\#ff6b1a\\]\\/20 { border-color: rgba(${rgb}, 0.2) !important; }
-      .border-\\[\\#ff6b1a\\]\\/25 { border-color: rgba(${rgb}, 0.25) !important; }
-      .border-\\[\\#ff6b1a\\]\\/30 { border-color: rgba(${rgb}, 0.3) !important; }
-      .border-\\[\\#ff6b1a\\]\\/40 { border-color: rgba(${rgb}, 0.4) !important; }
-      .border-\\[\\#ff6b1a\\]\\/50 { border-color: rgba(${rgb}, 0.5) !important; }
-      .hover\\:bg-\\[\\#ff6b1a\\]:hover { background-color: ${colorHex} !important; }
-      .hover\\:bg-\\[\\#ff6b1a\\]\\/10:hover { background-color: rgba(${rgb}, 0.1) !important; }
-      .hover\\:border-\\[\\#ff6b1a\\]:hover { border-color: ${colorHex} !important; }
-      .hover\\:border-\\[\\#ff6b1a\\]\\/35:hover { border-color: rgba(${rgb}, 0.35) !important; }
-      .hover\\:border-\\[\\#ff6b1a\\]\\/50:hover { border-color: rgba(${rgb}, 0.5) !important; }
-      .hover\\:text-\\[\\#ff6b1a\\]:hover { color: ${colorHex} !important; }
-      .focus\\:border-\\[\\#ff6b1a\\]:focus { border-color: ${colorHex} !important; }
-      .focus\\:border-\\[\\#ff6b1a\\]\\/50:focus { border-color: rgba(${rgb}, 0.5) !important; }
-      .border-l-\\[\\#ff6b1a\\] { border-left-color: ${colorHex} !important; }
-    `;
+  const rgb = `${r}, ${g}, ${b}`;
+  const appliedColor = colorHex || "#ff6b1a";
+
+  cssStr += `
+    .text-\\[\\#ff6b1a\\] { color: ${derivedTextHex} !important; }
+    .bg-\\[\\#ff6b1a\\] { 
+      background-color: ${appliedColor} !important; 
+      color: ${derivedBgTextHex} !important;
+    }
+    .bg-\\[\\#ff6b1a\\] svg {
+      stroke: ${derivedBgTextHex} !important;
+      color: ${derivedBgTextHex} !important;
+    }
+    .bg-\\[\\#ff6b1a\\]\\/10 { background-color: rgba(${rgb}, 0.1) !important; }
+    .bg-\\[\\#ff6b1a\\]\\/30 { background-color: rgba(${rgb}, 0.3) !important; }
+    .bg-\\[\\#ff6b1a\\]\\/50 { background-color: rgba(${rgb}, 0.5) !important; }
+    .border-\\[\\#ff6b1a\\] { border-color: ${appliedColor} !important; }
+    .border-\\[\\#ff6b1a\\]\\/20 { border-color: rgba(${rgb}, 0.2) !important; }
+    .border-\\[\\#ff6b1a\\]\\/25 { border-color: rgba(${rgb}, 0.25) !important; }
+    .border-\\[\\#ff6b1a\\]\\/30 { border-color: rgba(${rgb}, 0.3) !important; }
+    .border-\\[\\#ff6b1a\\]\\/40 { border-color: rgba(${rgb}, 0.4) !important; }
+    .border-\\[\\#ff6b1a\\]\\/50 { border-color: rgba(${rgb}, 0.5) !important; }
+    .hover\\:bg-\\[\\#ff6b1a\\]:hover { 
+      background-color: ${appliedColor} !important; 
+      color: ${derivedBgTextHex} !important;
+    }
+    .hover\\:bg-\\[\\#ff6b1a\\] svg:hover {
+      stroke: ${derivedBgTextHex} !important;
+    }
+    .hover\\:bg-\\[\\#ff6b1a\\]\\/10:hover { background-color: rgba(${rgb}, 0.1) !important; }
+    .hover\\:border-\\[\\#ff6b1a\\]:hover { border-color: ${appliedColor} !important; }
+    .hover\\:border-\\[\\#ff6b1a\\]\\/35:hover { border-color: rgba(${rgb}, 0.35) !important; }
+    .hover\\:border-\\[\\#ff6b1a\\]\\/50:hover { border-color: rgba(${rgb}, 0.5) !important; }
+    .hover\\:text-\\[\\#ff6b1a\\]:hover { color: ${derivedTextHex} !important; }
+    .focus\\:border-\\[\\#ff6b1a\\]:focus { border-color: ${appliedColor} !important; }
+    .focus\\:border-\\[\\#ff6b1a\\]\\/50:focus { border-color: rgba(${rgb}, 0.5) !important; }
+    .border-l-\\[\\#ff6b1a\\] { border-left-color: ${appliedColor} !important; }
+  `;
+
+  if (fontFamily) {
+    const foundFont = ALL_FONTS.find(f => f.id === fontFamily);
+    if (foundFont) {
+      cssStr += `
+        body, .font-sans, p, span, h1, h2, h3, h4, h5, h6, button, div, input, textarea, select {
+          font-family: ${foundFont.family} !important;
+        }
+        .font-display {
+          font-family: ${foundFont.family} !important;
+        }
+      `;
+    }
   }
 
   if (bgTheme && bgTheme !== "midnight") {
-    let bg0 = "#0d0d1a"; // Dashboard BG
-    let bg1 = "#111120"; // Card BG
+    let bg0 = "#0d0d1a";
+    let bg1 = "#111120";
+    let sidebarBg = "#0a0a14";
+    let borderPrimary = "#2a2a50";
+    let borderSecondary = "#1e1e38";
+    let text100 = "#ffffff";
+    let text200 = "#e2e8f0";
+    let text300 = "#cbd5e1";
+    let text400 = "#94a3b8";
+    let text500 = "#64748b";
     let extraCss = "";
 
     // Shared overrides for light themes
@@ -77,36 +169,416 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string) => {
       .bg-\\[\\#2a2a50\\] { background-color: #cbd5e1 !important; }
       .bg-\\[\\#2a2a50\\]\\/50 { background-color: rgba(203, 213, 225, 0.5) !important; }
       body { color: #0f172a !important; }
-      .text-\\[10px\\] { font-size: 0.75rem !important; }
-      .text-xs { font-size: 0.85rem !important; line-height: 1.25rem !important; }
-      .text-sm { font-size: 1rem !important; line-height: 1.5rem !important; }
-      .text-base { font-size: 1.15rem !important; line-height: 1.75rem !important; }
-      .text-lg { font-size: 1.25rem !important; line-height: 1.75rem !important; }
-      .text-xl { font-size: 1.5rem !important; }
-      .text-2xl { font-size: 1.8rem !important; }
+      
+      /* Safety exclusions: Preserve white text inside buttons, badges, selectors, active states and high-contrast labels */
+      button .text-white, button.text-white, 
+      [class*="bg-emerald-"] .text-white, [class*="bg-emerald-"] .text-slate-100,
+      [class*="bg-rose-"] .text-white, [class*="bg-rose-"] .text-slate-100,
+      [class*="bg-red-"] .text-white, [class*="bg-indigo-"] .text-white, 
+      [class*="bg-blue-"] .text-white, [class*="bg-fuchsia-"] .text-white,
+      [class*="bg-[#ff6b1a]"] .text-white, [class*="bg-[#ff6b1a]"] .text-slate-100,
+      [class*="hover:bg-[#ff6b1a]"]:hover .text-white,
+      [class*="hover:bg-[#ff6b1a]"]:hover .text-slate-100,
+      .text-white-force, .bg-emerald-500 *, .bg-rose-500 * {
+        color: #ffffff !important;
+      }
+
+      .text-\\[10px\\] { font-size: 10px !important; }
+      .text-xs { font-size: 12px !important; }
+      .text-sm { font-size: 14px !important; }
+      .text-base { font-size: 16px !important; }
+      .text-lg { font-size: 18px !important; }
+      .text-xl { font-size: 20px !important; }
+      .text-2xl { font-size: 24px !important; }
     `;
 
-    if (bgTheme === "minimal") {
+    if (bgTheme === "superhero") {
+      bg0 = "#05081c";
+      bg1 = "#0e1236";
+      sidebarBg = "#03040a";
+      borderPrimary = "#ffd700";
+      borderSecondary = "#ae8b02";
+      text100 = "#ffffff";
+      text400 = "#ffaa00";
+      extraCss = `
+        body {
+          --font-sans: "Space Grotesk", sans-serif;
+          --font-display: "Space Grotesk", sans-serif;
+          --font-mono: "Fira Code", monospace;
+          background-image: radial-gradient(circle at top right, rgba(239, 68, 68, 0.15), transparent 60%), 
+                            radial-gradient(circle at bottom left, rgba(56, 189, 248, 0.15), transparent 60%), 
+                            radial-gradient(#1e1b4b 1px, transparent 1px) !important;
+          background-size: 100% 100%, 100% 100%, 20px 20px !important;
+          background-color: #05081c !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #ffd700 !important; border-width: 3px !important; border-style: solid !important; }
+        .text-slate-100, .text-white { color: #ffffff !important; font-weight: 900 !important; text-shadow: 2px 2px 0px #b45309, 0 0 10px rgba(255, 215, 0, 0.4) !important; }
+        .text-slate-400 { color: #ffaa00 !important; font-weight: 900 !important; text-transform: uppercase !important; }
+        .bg-\\[\\#2a2a50\\] { background-color: #ffd700 !important; }
+        .bg-\\[\\#111120\\] { 
+          border: 3px solid #ffaa00 !important; 
+          background-color: #0b103d !important; 
+          box-shadow: 8px 8px 0px #000000, 0 0 15px rgba(255, 215, 0, 0.15) !important;
+          border-radius: 12px !important; 
+          position: relative;
+        }
+        /* Sticker styling indicator */
+        .bg-\\[\\#111120\\]::after {
+          content: "⚡️ JUSTICE CONSOLE ★";
+          position: absolute;
+          top: -12px;
+          right: 15px;
+          background: linear-gradient(135deg, #ef4444 0%, #ff0055 100%);
+          color: white;
+          font-size: 8px;
+          font-family: "Space Grotesk", sans-serif;
+          padding: 2px 8px;
+          border-radius: 40px;
+          font-weight: 900;
+          border: 1.5px solid white;
+          box-shadow: 3px 3px 0px #000;
+          letter-spacing: 1px;
+        }
+      `;
+    } else if (bgTheme === "forest") {
+      bg0 = "#031207";
+      bg1 = "#0a2612";
+      sidebarBg = "#010803";
+      borderPrimary = "#22c55e";
+      borderSecondary = "#14532d";
+      text100 = "#f0fdf4";
+      text400 = "#4ade80";
+      extraCss = `
+        body {
+          --font-sans: "Inter", sans-serif;
+          --font-display: "Outfit", sans-serif;
+          --font-mono: "JetBrains Mono", monospace;
+          background-image: 
+            radial-gradient(circle at 10% 20%, rgba(34, 197, 94, 0.1) 0%, transparent 50%),
+            radial-gradient(circle at 90% 85%, rgba(234, 179, 8, 0.08) 0%, transparent 50%),
+            repeating-linear-gradient(45deg, rgba(34, 197, 94, 0.02) 0px, rgba(34, 197, 94, 0.02) 1px, transparent 1px, transparent 24px) !important;
+          background-color: #031207 !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #2e5c3e !important; }
+        .text-slate-100, .text-white { color: #f0fdf4 !important; font-family: "Outfit", sans-serif !important; font-weight: 800 !important; }
+        .text-slate-400 { color: #86efac !important; }
+        .bg-\\[\\#111120\\] { 
+          border-color: #15803d !important; 
+          background-color: #061e0f !important; 
+          border-radius: 24px !important;
+          border-left: 6px solid #22c55e !important;
+          box-shadow: 0 10px 30px -5px rgba(2, 48, 18, 0.7), inset 0 0 12px rgba(34, 197, 94, 0.1) !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "🍃 WOODLAND SANCTUARY";
+          position: absolute;
+          bottom: 8px;
+          right: 14px;
+          color: #22c55e99;
+          font-weight: bold;
+          font-size: 7.5px;
+          letter-spacing: 1.5px;
+          font-family: monospace;
+        }
+      `;
+    } else if (bgTheme === "luxury") {
+      bg0 = "#080603";
+      bg1 = "#1c1307";
+      sidebarBg = "#030201";
+      borderPrimary = "#d4af37";
+      borderSecondary = "#5e481a";
+      text100 = "#ffffff";
+      text400 = "#eed7a1";
+      extraCss = `
+        body {
+          --font-sans: "Playfair Display", serif;
+          --font-display: "Playfair Display", serif;
+          --font-mono: "Playfair Display", serif;
+          background-image: 
+            radial-gradient(ellipse at center, #231807 0%, #080603 100%),
+            repeating-linear-gradient(0deg, rgba(212, 175, 55, 0.02) 0px, rgba(212, 175, 55, 0.02) 1px, transparent 1px, transparent 40px) !important;
+          background-color: #080603 !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #c5a059 !important; border-width: 1.5px !important; }
+        .text-slate-100, .text-white { color: #fdfaf2 !important; font-family: "Playfair Display", serif !important; text-shadow: 0 0 10px rgba(212, 175, 55, 0.5) !important; font-style: italic !important; }
+        .text-slate-400 { color: #eed7a1 !important; font-style: italic !important; font-weight: bold !important; }
+        .bg-\\[\\#111120\\] { 
+          border: 1px solid #d4af37 !important; 
+          background-color: #120a03 !important; 
+          box-shadow: 0 15px 35px rgba(212, 175, 55, 0.12), inset 0 0 15px rgba(212,175,55,0.05) !important; 
+          border-radius: 8px !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "⚜️ IMPERIAL ATELIER";
+          position: absolute;
+          top: 8px;
+          right: 14px;
+          color: #d4af37bb;
+          font-family: "Playfair Display", serif;
+          font-weight: bold;
+          font-size: 8px;
+          letter-spacing: 2.5px;
+        }
+      `;
+    } else if (bgTheme === "cyberpunk") {
+      bg0 = "#000000";
+      bg1 = "#0c0211";
+      sidebarBg = "#000000";
+      borderPrimary = "#ff007f";
+      borderSecondary = "#250036";
+      text100 = "#ffffff";
+      text400 = "#00ffff";
+      extraCss = `
+        body {
+          --font-sans: "Space Grotesk", sans-serif;
+          --font-display: "Space Grotesk", sans-serif;
+          --font-mono: "Fira Code", monospace;
+          background-image: 
+            linear-gradient(180deg, rgba(0,0,0,0.92) 0%, rgba(12,2,17,0.97) 100%), 
+            repeating-linear-gradient(0deg, rgba(255, 0, 127, 0.05) 0px, rgba(255, 0, 127, 0.05) 1px, transparent 1px, transparent 20px),
+            repeating-linear-gradient(90deg, rgba(0, 255, 255, 0.03) 0px, rgba(0, 255, 255, 0.03) 1px, transparent 1px, transparent 40px) !important;
+          background-color: #000000 !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #ff007f !important; border-width: 2px !important; border-style: solid !important; }
+        .text-slate-100, .text-white { color: #ffffff !important; text-shadow: 0 0 8px #ff007f, 0 0 15px #00ffff !important; font-family: "Space Grotesk" !important; font-weight: 900 !important; letter-spacing: 1px; }
+        .text-slate-400 { color: #00ffff !important; font-weight: bold !important; text-shadow: 0 0 6px rgba(0, 255, 255, 0.8) !important; font-family: "Fira Code", monospace !important; }
+        .bg-\\[\\#111120\\] { 
+          border: 2px solid #ff007f !important; 
+          background-color: rgba(14, 2, 22, 0.9) !important; 
+          box-shadow: 0px 0px 22px rgba(255, 0, 127, 0.35), inset 0 0 12px rgba(0, 255, 255, 0.1) !important; 
+          border-radius: 0px !important;
+          clip-path: polygon(100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 0) !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "🏴‍☠️ [CYBER_TACTICAL_CORE]";
+          position: absolute;
+          top: 6px;
+          right: 14px;
+          background: #ff007f;
+          color: black;
+          font-family: monospace;
+          font-weight: 950;
+          font-size: 7px;
+          padding: 1px 5px;
+        }
+      `;
+    } else if (bgTheme === "milkyway") {
+      bg0 = "#030107";
+      bg1 = "#110724";
+      sidebarBg = "#020004";
+      borderPrimary = "#a855f7";
+      borderSecondary = "#4c1d95";
+      text100 = "#f5f3ff";
+      text400 = "#d8b4fe";
+      extraCss = `
+        body {
+          --font-sans: "Outfit", sans-serif;
+          --font-display: "Quicksand", sans-serif;
+          --font-mono: "JetBrains Mono", monospace;
+          background-image: 
+            radial-gradient(ellipse at top, rgba(168, 85, 247, 0.15) 0%, transparent 60%),
+            radial-gradient(1.5px 1.5px at 30px 40px, #fff, rgba(0,0,0,0)), 
+            radial-gradient(2px 2px at 120px 180px, #e879f9, rgba(0,0,0,0)), 
+            radial-gradient(1px 1px at 250px 350px, #818cf8, rgba(0,0,0,0)), 
+            linear-gradient(180deg, #030107 0%, #0d051f 100%) !important;
+          background-size: 100% 100%, 120px 120px, 200px 200px, 300px 300px, 100% 100% !important;
+          background-color: #030107 !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #a855f7 !important; }
+        .text-slate-100, .text-white { color: #f5f3ff !important; text-shadow: 0 0 10px #c084fc, 0 0 20px rgba(168, 85, 247, 0.4) !important; font-family: "Quicksand" !important; font-weight: bold; }
+        .text-slate-400 { color: #e9d5ff !important; font-family: "JetBrains Mono" !important; }
+        .bg-\\[\\#111120\\] { 
+          border: 1px solid rgba(168, 85, 247, 0.45) !important; 
+          background-color: rgba(15, 6, 33, 0.8) !important; 
+          backdrop-filter: blur(16px) !important;
+          border-radius: 20px !important; 
+          box-shadow: 0 0 30px rgba(168, 85, 247, 0.16), inset 0 0 15px rgba(240, 171, 252, 0.05) !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "✦ CELESTIAL PROTOCOL";
+          position: absolute;
+          top: -10px;
+          left: 20px;
+          background: rgba(168, 85, 247, 0.2);
+          border: 1px solid #c084fc;
+          color: #f5f3ff;
+          font-size: 7px;
+          padding: 2px 8px;
+          border-radius: 30px;
+          font-weight: 800;
+          letter-spacing: 1px;
+        }
+      `;
+    } else if (bgTheme === "ocean") {
+      bg0 = "#01080e";
+      bg1 = "#041528";
+      sidebarBg = "#000307";
+      borderPrimary = "#0c7390";
+      borderSecondary = "#164e63";
+      text100 = "#ecfeff";
+      text400 = "#22d3ee";
+      extraCss = `
+        body {
+          --font-sans: "Inter", sans-serif;
+          --font-display: "Outfit", sans-serif;
+          --font-mono: "Fira Code", monospace;
+          background-image: 
+            radial-gradient(ellipse at bottom, #062b3d 0%, #01080e 80%),
+            repeating-linear-gradient(0deg, rgba(34, 211, 238, 0.015) 0px, rgba(34, 211, 238, 0.015) 1px, transparent 1px, transparent 20px) !important;
+          background-color: #01080e !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #0e7490 !important; }
+        .text-slate-100, .text-white { color: #ecfeff !important; text-shadow: 0 2px 14px rgba(34, 211, 238, 0.5) !important; font-family: "Outfit", sans-serif !important; }
+        .text-slate-400 { color: #22d3ee !important; }
+        .bg-\\[\\#111120\\] { 
+          border: 1.5px solid #0891b2 !important; 
+          background-color: rgba(4, 20, 39, 0.9) !important; 
+          border-radius: 24px !important;
+          border-bottom: 5px solid #06b6d4 !important;
+          box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6), inset 0 2px 10px rgba(34, 211, 238, 0.1) !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "⚓ DEEP_SEA_VECTORS";
+          position: absolute;
+          bottom: -10px;
+          right: 20px;
+          background: #0891b2;
+          color: white;
+          font-weight: 900;
+          font-size: 7px;
+          padding: 1px 7px;
+          border-radius: 4px;
+        }
+      `;
+    } else if (bgTheme === "teens") {
+      bg0 = "#1a0b2e";
+      bg1 = "#2c124d";
+      sidebarBg = "#0e051c";
+      borderPrimary = "#ff00ff";
+      borderSecondary = "#4a044e";
+      text100 = "#ffffff";
+      text400 = "#00fbc5";
+      extraCss = `
+        body {
+          --font-sans: "Quicksand", sans-serif;
+          --font-display: "Quicksand", sans-serif;
+          --font-mono: "Fira Code", monospace;
+          background-image: 
+            radial-gradient(circle at 15% 20%, rgba(244, 63, 94, 0.12) 0%, transparent 45%),
+            radial-gradient(circle at 85% 75%, rgba(168, 85, 247, 0.12) 0%, transparent 45%),
+            repeating-linear-gradient(135deg, rgba(255, 0, 255, 0.02) 0px, rgba(255, 0, 255, 0.02) 2px, transparent 2px, transparent 15px) !important;
+          background-color: #1a0b2e !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #ff00ff !important; }
+        .text-slate-100, .text-white { color: #ffffff !important; text-shadow: 0 0 15px #ff00ff, 0 0 25px rgba(255,0,255,0.2) !important; font-family: "Quicksand" !important; font-weight: 900; }
+        .text-slate-400 { color: #00fbc5 !important; font-family: "Quicksand" !important; font-weight: 800 !important; }
+        .bg-\\[\\#111120\\] { 
+          border: 2px solid #ff00ff !important; 
+          background-color: #1f0b3b !important; 
+          box-shadow: 8px 8px 0px rgba(255, 0, 255, 0.25), 0px 5px 20px rgba(0,0,0,0.5) !important; 
+          border-radius: 20px !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "⚡ SYSTEM VIBE CHECK";
+          position: absolute;
+          top: -11px;
+          left: 18px;
+          background: #00fbc5;
+          color: black;
+          font-weight: 950;
+          font-size: 7.5px;
+          padding: 2px 7px;
+          border-radius: 99px;
+          border: 1px solid black;
+        }
+      `;
+    } else if (bgTheme === "swiss") {
+      bg0 = "#ffffff";
+      bg1 = "#f5f5f7";
+      sidebarBg = "#ffffff";
+      borderPrimary = "#000000";
+      borderSecondary = "#222222";
+      text100 = "#000000";
+      text200 = "#111111";
+      text300 = "#2d2d2d";
+      text400 = "#000000";
+      text500 = "#555555";
+      extraCss = `
+        body {
+          --font-sans: "Helvetica Neue", Arial, sans-serif;
+          --font-display: "Helvetica Neue", Arial, sans-serif;
+          --font-mono: "Fira Code", monospace;
+          background-color: #ffffff !important;
+          background-image: 
+            repeating-linear-gradient(90deg, #f0f0f4 0px, #f0f0f4 1px, transparent 1px, transparent 60px) !important;
+          letter-spacing: -0.025em !important;
+        }
+        .font-sans, .font-display { font-family: "Helvetica Neue", Arial, sans-serif !important; font-weight: 900 !important; }
+        .text-slate-100, .text-white { color: #000000 !important; font-weight: 950 !important; letter-spacing: -0.04em !important; }
+        .text-slate-200 { color: #111111 !important; font-weight: 800 !important; }
+        .text-slate-300 { color: #222222 !important; }
+        .text-slate-300, .text-slate-400 { color: #000000 !important; font-weight: 900 !important; text-transform: uppercase !important; }
+        .text-slate-500 { color: #444444 !important; }
+        .border-\\[\\#2a2a50\\] { border-color: #000000 !important; border-width: 3px !important; }
+        .border-\\[\\#111120\\] { border-color: #000000 !important; border-width: 3px !important; }
+        .bg-\\[\\#111120\\] { 
+          background-color: #ffffff !important; 
+          border: 3.5px solid #000000 !important; 
+          box-shadow: none !important; 
+          border-radius: 0px !important;
+        }
+        .bg-\\[\\#0a0a14\\] { background-color: #fafafa !important; border-right: 3 board solid #000000 !important; }
+        .bg-\\[\\#2a2a50\\] { background-color: #000000 !important; }
+        .text-\\[\\#ff6b1a\\] { color: #e11d48 !important; font-weight: 900 !important; }
+        .rounded-2xl, .rounded-xl, .rounded-lg, .rounded { border-radius: 0px !important; }
+        .bg-\\[\\#111120\\]::after {
+          content: "+ NEUE ARCHITEKTUR";
+          position: absolute;
+          top: 6px;
+          right: 12px;
+          color: #e11d48;
+          font-weight: 950;
+          font-size: 7.5px;
+          letter-spacing: 0.5px;
+        }
+      `;
+    } else if (bgTheme === "minimal") {
       bg0 = "#f8fafc";
       bg1 = "#ffffff";
+      sidebarBg = "#f1f5f9";
+      borderPrimary = "#cbd5e1";
+      borderSecondary = "#e2e8f0";
+      text100 = "#0f172a";
+      text400 = "#475569";
       extraCss =
         lightModeOverride +
         `
           body {
             --font-display: "Inter", sans-serif;
             --font-mono: "Inter", sans-serif;
+            background-color: #f8fafc !important;
+            background-image: radial-gradient(rgba(148, 163, 184, 0.08) 1.5px, transparent 1.5px) !important;
+            background-size: 30px 30px !important;
           }
           .font-sans, .font-display, .font-mono { font-family: "Inter", sans-serif !important; }
-          .rounded-2xl { border-radius: 12px !important; }
-          .rounded-xl { border-radius: 10px !important; }
+          .rounded-2xl { border-radius: 16px !important; }
+          .rounded-xl { border-radius: 12px !important; }
           .rounded-lg, .rounded { border-radius: 8px !important; }
           .border-\\[\\#2a2a50\\] { border-color: #e2e8f0 !important; }
-          .bg-\\[\\#111120\\] { box-shadow: 0 4px 20px rgba(0,0,0,0.03) !important; border-color: transparent !important; }
+          .bg-\\[\\#111120\\] { 
+            box-shadow: 0 4px 30px rgba(15, 23, 42, 0.025), inset 0 1px 0 rgba(255,255,255,0.6) !important; 
+            border: 1px solid #e2e8f0 !important; 
+            border-radius: 16px !important; 
+          }
         `;
-    }
-    if (bgTheme === "retro") {
+    } else if (bgTheme === "retro") {
       bg0 = "#fffbe6";
       bg1 = "#ffffff";
+      sidebarBg = "#fbe5a3";
+      borderPrimary = "#000000";
+      borderSecondary = "#111111";
+      text100 = "#000000";
+      text400 = "#333333";
       extraCss =
         lightModeOverride +
         `
@@ -114,24 +586,46 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string) => {
             --font-sans: "Space Grotesk", sans-serif;
             --font-display: "Space Grotesk", sans-serif;
             --font-mono: "VT323", monospace;
+            background-image: 
+              radial-gradient(#000000 12%, transparent 13%),
+              radial-gradient(#000000 12%, transparent 13%) !important;
+            background-size: 20px 20px !important;
+            background-position: 0 0, 10px 10px !important;
+            background-color: #f9f5e1 !important;
           }
-          .font-sans, .font-display { font-family: var(--font-sans) !important; font-weight: 700 !important; }
-          .font-mono { font-family: var(--font-mono) !important; font-size: 1.1rem !important; }
-          .rounded-2xl, .rounded-xl, .rounded-lg, .rounded { border-radius: 0 !important; }
-          .border-\\[\\#2a2a50\\] { border-color: #000000 !important; border-width: 2px !important; }
-          .border-\\[\\#111120\\] { border-color: #000000 !important; border-width: 2px !important; }
+          .font-sans, .font-display { font-family: var(--font-sans) !important; font-weight: 900 !important; }
+          .font-mono { font-family: var(--font-mono) !important; font-size: 1.2rem !important; }
+          .rounded-2xl, .rounded-xl, .rounded-lg, .rounded { border-radius: 6px !important; }
+          .border-\\[\\#2a2a50\\] { border-color: #000000 !important; border-width: 3px !important; }
+          .border-\\[\\#111120\\] { border-color: #000000 !important; border-width: 3px !important; }
           .bg-\\[\\#111120\\] { 
             background-color: #ffffff !important; 
-            box-shadow: 4px 4px 0px 0px #000000 !important; 
-            border: 2px solid #000000 !important;
+            box-shadow: 8px 8px 0px #000000 !important; 
+            border: 3px solid #000000 !important;
+            border-radius: 6px !important;
           }
-          .text-slate-100, .text-white { color: #000000 !important; font-weight: 800 !important; }
-          .text-slate-400 { color: #333333 !important; font-weight: bold !important; }
+          .text-slate-100, .text-white { color: #000000 !important; font-weight: 950 !important; text-transform: uppercase !important; }
+          .text-slate-400 { color: #111111 !important; font-weight: 900 !important; }
+          .bg-\\[\\#111120\\]::after {
+            content: "✴️ RETRO_POP";
+            position: absolute;
+            bottom: 6px;
+            right: 12px;
+            background: #000;
+            color: #fffbe6;
+            font-size: 7px;
+            font-family: monospace;
+            padding: 1px 5px;
+          }
         `;
-    }
-    if (bgTheme === "cute") {
+    } else if (bgTheme === "cute") {
       bg0 = "#fff0f5";
       bg1 = "#ffffff";
+      sidebarBg = "#ffe2e9";
+      borderPrimary = "#ffb6c1";
+      borderSecondary = "#ffd1dc";
+      text100 = "#5a4b5e";
+      text400 = "#88788c";
       extraCss =
         lightModeOverride +
         `
@@ -139,24 +633,46 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string) => {
             --font-sans: "Quicksand", sans-serif;
             --font-display: "Quicksand", sans-serif;
             --font-mono: "Quicksand", sans-serif;
+            background-image: 
+              radial-gradient(#ffd1dc 30%, transparent 30%),
+              radial-gradient(#ffe2f0 30%, transparent 30%) !important;
+            background-size: 32px 32px !important;
+            background-position: 0 0, 16px 16px !important;
+            background-color: #fff2f6 !important;
           }
-          .rounded-2xl { border-radius: 2rem !important; }
-          .rounded-xl { border-radius: 1.5rem !important; }
-          .rounded-lg { border-radius: 1rem !important; }
-          .font-sans, .font-display, .font-mono { font-family: "Quicksand", sans-serif !important; font-weight: 600 !important; }
+          .rounded-2xl { border-radius: 28px !important; }
+          .rounded-xl { border-radius: 20px !important; }
+          .rounded-lg { border-radius: 14px !important; }
+          .font-sans, .font-display, .font-mono { font-family: "Quicksand", sans-serif !important; font-weight: 800 !important; }
           .bg-\\[\\#111120\\] { 
             background-color: #ffffff !important; 
-            box-shadow: 0 8px 24px rgba(255, 182, 193, 0.2) !important; 
-            border-color: #ffe4e1 !important;
-            border-width: 2px !important;
+            box-shadow: 0 12px 30px rgba(255, 150, 170, 0.22), inset 0 -4px 0 rgba(255,182,193,0.3) !important; 
+            border: 3.5px solid #ffb6c1 !important;
+            border-radius: 24px !important;
+          }
+          .bg-\\[\\#111120\\]::after {
+            content: "☁️ SoftCloud ✨";
+            position: absolute;
+            top: -12px;
+            right: 18px;
+            background: linear-gradient(135deg, #ff9eb5 0%, #ffcbd5 100%);
+            color: white;
+            font-size: 8px;
+            padding: 2.5px 10px;
+            border-radius: 25px;
+            font-weight: 900;
           }
           .text-slate-100 { color: #5a4b5e !important; }
-          .text-slate-400 { color: #88788c !important; }
+          .text-slate-400 { color: #ff6b8b !important; }
         `;
-    }
-    if (bgTheme === "playful") {
+    } else if (bgTheme === "playful") {
       bg0 = "#e0f2fe";
       bg1 = "#ffffff";
+      sidebarBg = "#bae6fd";
+      borderPrimary = "#0ea5e9";
+      borderSecondary = "#38bdf8";
+      text100 = "#01527e";
+      text400 = "#38bdf8";
       extraCss =
         lightModeOverride +
         `
@@ -164,24 +680,411 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string) => {
             --font-sans: "Space Grotesk", sans-serif;
             --font-display: "Space Grotesk", sans-serif;
             --font-mono: "Space Grotesk", sans-serif;
+            background-image: 
+              radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 50%),
+              repeating-linear-gradient(90deg, rgba(56, 189, 248, 0.05) 0px, rgba(56, 189, 248, 0.05) 4px, transparent 4px, transparent 30px) !important;
+            background-color: #e0f2fe !important;
           }
           .font-sans, .font-display, .font-mono { font-family: "Space Grotesk", sans-serif !important; }
-          .rounded-2xl { border-radius: 16px !important; }
+          .rounded-2xl { border-radius: 20px !important; }
           .bg-\\[\\#111120\\] { 
             background-color: #ffffff !important; 
-            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.15) !important;
-            border-color: #bae6fd !important;
-            border-width: 2px !important;
+            box-shadow: 0 10px 40px rgba(14, 165, 233, 0.18) !important;
+            border: 3px solid #0ea5e9 !important;
+            border-radius: 20px !important;
           }
-          .text-slate-100 { color: #0284c7 !important; font-weight: 800 !important; }
+          .text-slate-100 { color: #0369a1 !important; font-weight: 900 !important; }
           .text-slate-300 { color: #0ea5e9 !important; }
-          .text-slate-400 { color: #38bdf8 !important; font-weight: bold !important; }
+          .text-slate-400 { color: #0284c7 !important; font-weight: bold !important; }
+          .bg-\\[\\#111120\\]::after {
+            content: "🎉 JOYSTICK RIDE";
+            position: absolute;
+            top: -10px;
+            right: 15px;
+            background: #ffbc00;
+            color: black;
+            font-size: 7.5px;
+            font-weight: 950;
+            padding: 2px 7px;
+            border-radius: 6px;
+            border: 2px solid black;
+          }
         `;
+    } else if (bgTheme === "crimson") {
+      bg0 = "#0d0202";
+      bg1 = "#1a0303";
+      sidebarBg = "#060101";
+      borderPrimary = "#b91c1c";
+      borderSecondary = "#5c0e0e";
+      text100 = "#ffffff";
+      text400 = "#ef4444";
+      text500 = "#991b1b";
+      extraCss = `
+        body {
+          --font-sans: "Inter", sans-serif;
+          --font-display: "Space Grotesk", sans-serif;
+          --font-mono: "JetBrains Mono", monospace;
+          background-image: 
+            radial-gradient(circle at center, #2e0505 0%, #0d0202 100%),
+            repeating-linear-gradient(135deg, rgba(220, 38, 38, 0.03) 0px, rgba(220, 38, 38, 0.03) 1px, transparent 1px, transparent 40px) !important;
+          background-color: #0d0202 !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #ef4444 !important; border-width: 1.5px !important; }
+        .text-slate-400 { color: #fca5a5 !important; }
+        .bg-\\[\\#111120\\] { 
+          background-color: #120202 !important; 
+          border: 1px solid #7f1d1d !important;
+          border-left: 5px solid #ef4444 !important;
+          box-shadow: 0 0 25px rgba(220, 38, 38, 0.18), inset 0 0 10px rgba(0,0,0,0.8) !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "☣️ [CRIMSON_GRID_SECTOR]";
+          position: absolute;
+          top: 6px;
+          right: 14px;
+          color: #ef4444;
+          font-weight: 800;
+          font-family: monospace;
+          font-size: 7px;
+        }
+      `;
+    } else if (bgTheme === "hacker") {
+      bg0 = "#000000";
+      bg1 = "#000c02";
+      sidebarBg = "#000000";
+      borderPrimary = "#00ff66";
+      borderSecondary = "#003b12";
+      text100 = "#00ff66";
+      text400 = "#00ff66";
+      extraCss = `
+        body {
+          --font-sans: "Consolas", "Courier New", monospace;
+          --font-display: "Consolas", "Courier New", monospace;
+          --font-mono: "Consolas", "Courier New", monospace;
+          background-image: 
+            linear-gradient(rgba(0,10,0,0.95), rgba(0,0,0,0.98)),
+            repeating-linear-gradient(0deg, rgba(0, 255, 102, 0.03) 0px, rgba(0, 255, 102, 0.03) 2px, transparent 2px, transparent 10px) !important;
+          background-color: #000000 !important;
+        }
+        .font-sans, .font-display, .font-mono { font-family: "Consolas", monospace !important; }
+        .border-\\[\\#2a2a50\\] { border-color: #00ff66 !important; border-style: dashed !important; border-width: 1px !important; }
+        .bg-\\[\\#111120\\] { 
+          border: 1px solid #00ff66 !important; 
+          background-color: rgba(0, 15, 4, 0.9) !important; 
+          box-shadow: 0 0 15px rgba(0, 255, 102, 0.12) !important; 
+        }
+        .rounded-2xl, .rounded-xl, .rounded-lg, .rounded, .rounded-full { border-radius: 0px !important; }
+        .text-slate-100, .text-white, .text-slate-200, .text-slate-300, .text-slate-400, .text-slate-500, .text-\\[\\#ff6b1a\\] { 
+          color: #00ff66 !important; 
+          text-shadow: 0 0 4px rgba(0, 255, 102, 0.6) !important; 
+        }
+        .border-\\[\\#1e1e38\\] { border-color: #004d1c !important; }
+        .bg-\\[\\#111120\\]::after {
+          content: "📟 [TERMINAL LOAD ACTIVE]";
+          position: absolute;
+          top: 6px;
+          right: 14px;
+          font-size: 7.5px;
+          color: #00ff66;
+          font-weight: bold;
+          letter-spacing: 1px;
+        }
+      `;
+    } else if (bgTheme === "cars") {
+      bg0 = "#0a0a0d";
+      bg1 = "#13141a";
+      sidebarBg = "#040406";
+      borderPrimary = "#ef4444";
+      borderSecondary = "#272a35";
+      text100 = "#ffffff";
+      text400 = "#ef4444";
+      extraCss = `
+        body {
+          --font-sans: "Space Grotesk", sans-serif;
+          --font-display: "Space Grotesk", sans-serif;
+          --font-mono: "Fira Code", monospace;
+          background-image: 
+            radial-gradient(circle at bottom right, rgba(239, 68, 68, 0.12) 0%, transparent 50%),
+            repeating-linear-gradient(45deg, #13141a 0px, #13141a 12px, #0a0a0d 12px, #0a0a0d 24px) !important;
+          background-color: #0a0a0d !important;
+          font-style: italic !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #ef4444 !important; border-width: 2px !important; border-style: double !important; }
+        .text-slate-100, .text-white { color: #ffffff !important; text-shadow: 0px 0px 10px rgba(239, 68, 68, 0.5) !important; font-weight: 900 !important; text-transform: uppercase !important; }
+        .text-slate-400 { color: #ef4444 !important; font-weight: 800 !important; }
+        .bg-\\[\\#111120\\] { 
+          background-color: #171921 !important; 
+          border: 2px solid #ef4444 !important;
+          border-left: 8px solid #ef4444 !important;
+          border-radius: 6px !important;
+          box-shadow: 6px 6px 0px #000000, 0 10px 20px rgba(0,0,0,0.4) !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "🏁 F1 telemetry";
+          position: absolute;
+          top: -10px;
+          right: 12px;
+          background: #ef4444;
+          color: white;
+          font-size: 7.5px;
+          font-family: monospace;
+          padding: 1.5px 6px;
+          font-weight: 900;
+          border-radius: 2px;
+        }
+      `;
+    } else if (bgTheme === "sports") {
+      bg0 = "#011206";
+      bg1 = "#062912";
+      sidebarBg = "#000702";
+      borderPrimary = "#ea580c";
+      borderSecondary = "#166534";
+      text100 = "#ffffff";
+      text400 = "#22c55e";
+      extraCss = `
+        body {
+          --font-sans: "Space Grotesk", sans-serif;
+          --font-display: "Space Grotesk", sans-serif;
+          --font-mono: "Courier New", monospace;
+          background-image: 
+            linear-gradient(180deg, #011206 0%, #03210d 100%),
+            repeating-linear-gradient(90deg, rgba(34, 197, 94, 0.02) 0px, rgba(34, 197, 94, 0.02) 2px, transparent 2px, transparent 40px) !important;
+          background-color: #011206 !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #ea580c !important; border-width: 2.5px !important; }
+        .text-slate-100, .text-white { color: #ffffff !important; font-weight: 900 !important; text-transform: uppercase !important; letter-spacing: 1px !important; text-shadow: 2px 2px 0px #ea580c !important; }
+        .text-slate-400 { color: #4ade80 !important; font-weight: 950 !important; }
+        .bg-\\[\\#111120\\] { 
+          background-color: #041f0d !important; 
+          border: 3.5px solid #ea580c !important; 
+          box-shadow: inset 0 0 15px rgba(34, 197, 94, 0.25), 8px 8px 0px #000000 !important;
+          border-radius: 12px !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "● LIVE STADIUM TRACKER";
+          position: absolute;
+          top: 6px;
+          right: 14px;
+          color: #22c55e;
+          font-weight: 900;
+          font-size: 7px;
+          font-family: monospace;
+          letter-spacing: 0.5px;
+        }
+      `;
+    } else if (bgTheme === "wildwest") {
+      bg0 = "#261a0f";
+      bg1 = "#382716";
+      sidebarBg = "#1c120a";
+      borderPrimary = "#bf8f54";
+      borderSecondary = "#5c3f21";
+      text100 = "#ebd0a9";
+      text400 = "#d4af37";
+      extraCss = `
+        body {
+          --font-sans: "Georgia", serif;
+          --font-display: "Georgia", serif;
+          --font-mono: "Courier New", monospace;
+          background-color: #261a0f !important;
+          background-image: 
+            repeating-linear-gradient(0deg, #261a0f 0px, #261a0f 50px, #1a110a 50px, #1a110a 52px) !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #bf935c !important; border-width: 2px !important; }
+        .text-slate-100, .text-white { color: #ebd0a9 !important; font-family: "Georgia", serif !important; font-weight: bold !important; text-shadow: 2px 2px 0px #000 !important; }
+        .text-slate-400 { color: #d4af37 !important; font-weight: bold !important; }
+        .bg-\\[\\#111120\\] { 
+          background-color: #4a341d !important; 
+          border: 3px solid #bf935c !important; 
+          border-radius: 0px !important;
+          box-shadow: 8px 8px 18px rgba(0,0,0,0.6) !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "🤠 SALOON WANTED";
+          position: absolute;
+          top: 8px;
+          right: 12px;
+          color: #d4af37;
+          font-size: 8.5px;
+          font-weight: bold;
+          font-family: "Georgia", serif;
+        }
+      `;
+    } else if (bgTheme === "futuristic") {
+      bg0 = "#030611";
+      bg1 = "#061026";
+      sidebarBg = "#02040a";
+      borderPrimary = "#38bdf8";
+      borderSecondary = "#072f4a";
+      text100 = "#38bdf8";
+      text400 = "#00fbc5";
+      extraCss = `
+        body {
+          --font-sans: "Space Grotesk", sans-serif;
+          --font-display: "Space Grotesk", sans-serif;
+          --font-mono: "Fira Code", monospace;
+          background-image: 
+            radial-gradient(circle at 50% 50%, #0e2042 0%, #030611 100%),
+            repeating-linear-gradient(90deg, rgba(56, 189, 248, 0.015) 0px, rgba(56, 189, 248, 0.015) 1px, transparent 1px, transparent 30px) !important;
+          background-color: #030611 !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #38bdf8 !important; border-width: 1px !important; }
+        .text-slate-100, .text-white { color: #e2f5ff !important; text-shadow: 0 0 12px rgba(56, 189, 248, 0.6) !important; }
+        .text-slate-400 { color: #00fbc5 !important; font-family: monospace !important; font-weight: bold; }
+        .bg-\\[\\#111120\\] { 
+          background-color: rgba(6, 18, 44, 0.75) !important; 
+          backdrop-filter: blur(20px) !important;
+          border: 1px solid rgba(56, 189, 248, 0.4) !important; 
+          border-radius: 24px !important;
+          box-shadow: 0 0 25px rgba(56, 189, 248, 0.15), inset 0 1px 1px rgba(255,255,255,0.1) !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "🔮 [UTOPIAN VECTOR]";
+          position: absolute;
+          top: -9px;
+          right: 20px;
+          background: rgba(56, 189, 248, 0.2);
+          border: 1.5px solid #38bdf8;
+          color: white;
+          padding: 1.5px 8px;
+          font-size: 7px;
+          border-radius: 30px;
+          font-weight: 800;
+        }
+      `;
+    } else if (bgTheme === "proper3d") {
+      bg0 = "#cbd5e1";
+      bg1 = "#f1f5f9";
+      sidebarBg = "#94a3b8";
+      borderPrimary = "#94a3b8";
+      borderSecondary = "#cbd5e1";
+      text100 = "#0f172a";
+      text400 = "#334155";
+      extraCss =
+        lightModeOverride +
+        `
+          body {
+            --font-sans: "Space Grotesk", sans-serif;
+            --font-display: "Space Grotesk", sans-serif;
+            background: #cbd5e1 !important;
+            background-image: radial-gradient(circle at center, #cbd5e1 0%, #94a3b8 100%) !important;
+          }
+          .rounded-2xl { border-radius: 20px !important; }
+          .rounded-xl { border-radius: 14px !important; }
+          .bg-\\[\\#111120\\] { 
+            background: #f1f5f9 !important; 
+            border: 1px solid #ffffff !important;
+            box-shadow: 10px 10px 22px #94a3b8, -10px -10px 22px #ffffff !important;
+            border-radius: 16px !important;
+          }
+          .border-\\[\\#2a2a50\\] { border-color: #cbd5e1 !important; }
+          input, button {
+            box-shadow: 4px 4px 8px #94a3b8, -4px -4px 8px #ffffff !important;
+          }
+        `;
+    } else if (bgTheme === "proper2d") {
+      bg0 = "#ffde00";
+      bg1 = "#ffffff";
+      sidebarBg = "#ff6bdf";
+      borderPrimary = "#000000";
+      borderSecondary = "#000000";
+      text100 = "#000000";
+      text400 = "#000000";
+      extraCss =
+        lightModeOverride +
+        `
+          body {
+            --font-sans: "Space Grotesk", sans-serif;
+            --font-display: "Space Grotesk", sans-serif;
+            font-family: "Space Grotesk" !important;
+            background-color: #ffde00 !important;
+            background-image: radial-gradient(#000000 9%, transparent 9%) !important;
+            background-size: 20px 20px !important;
+          }
+          .font-sans, .font-display, .font-mono { font-family: "Space Grotesk" !important; font-weight: 950 !important; }
+          .rounded-2xl, .rounded-xl, .rounded-lg, .rounded, .rounded-full { border-radius: 0px !important; }
+          .border-\\[\\#2a2a50\\] { border-color: #000000 !important; border-width: 4px !important; }
+          .border-\\[\\#111120\\] { border-color: #000000 !important; border-width: 4px !important; }
+          .bg-\\[\\#111120\\] { 
+            border: 4.5px solid #000000 !important; 
+            box-shadow: 10px 10px 0px #000000 !important; 
+            background-color: #ffffff !important;
+          }
+          .text-slate-100, .text-white { color: #000000 !important; font-weight: 950 !important; -webkit-text-stroke: 1.5px #000 !important; }
+          .text-slate-400 { color: #000000 !important; font-weight: 950 !important; }
+          .bg-\\[\\#111120\\]::after {
+            content: "✦ POP CRASH! ✦";
+            position: absolute;
+            top: -14px;
+            right: 15px;
+            background: #ff00ff;
+            color: white;
+            font-size: 9.5px;
+            font-weight: 950;
+            padding: 3px 10px;
+            border: 3px solid #000;
+            box-shadow: 3px 3px 0px #000;
+          }
+        `;
+    } else if (bgTheme === "mafia") {
+      bg0 = "#030303";
+      bg1 = "#111113";
+      sidebarBg = "#000000";
+      borderPrimary = "#990000";
+      borderSecondary = "#1b1b1c";
+      text100 = "#ffffff";
+      text400 = "#990000";
+      extraCss = `
+        body {
+          --font-sans: "Playfair Display", serif;
+          --font-display: "Playfair Display", serif;
+          --font-mono: "Georgia", serif;
+          background-image: 
+            radial-gradient(ellipse at bottom, #2b0404 0%, #030303 100%),
+            repeating-linear-gradient(90deg, #050505 0px, #050505 60px, rgba(130, 0, 0, 0.05) 60px, rgba(130, 0, 0, 0.05) 61px) !important;
+          background-color: #030303 !important;
+        }
+        .border-\\[\\#2a2a50\\] { border-color: #880000 !important; border-width: 1.5px !important; }
+        .text-slate-100, .text-white { color: #df1c1c !important; font-family: "Playfair Display" !important; text-shadow: 0 0 10px rgba(153, 0, 0, 0.7) !important; font-weight: bold; }
+        .text-slate-400 { color: #990000 !important; font-weight: bold !important; font-style: italic !important; }
+        .bg-\\[\\#111120\\] { 
+          background-color: #0c0a0a !important; 
+          border: 1.5px solid #2a1111 !important;
+          border-left: 5px solid #bd1c1c !important;
+          box-shadow: 0 15px 35px rgba(0,0,0,0.9), inset 0 0 10px rgba(189,28,28,0.08) !important;
+          border-radius: 4px !important;
+        }
+        .bg-\\[\\#111120\\]::after {
+          content: "🚬 LA FAMIGLIA UNDERWORLD";
+          position: absolute;
+          bottom: 8px;
+          right: 14px;
+          color: #bd1c1caa;
+          font-size: 7.5px;
+          font-weight: bold;
+          letter-spacing: 1.5px;
+          font-family: serif;
+        }
+      `;
     }
 
     cssStr += `
+      body {
+        background-color: ${bg0} !important;
+        color: ${text300} !important;
+      }
       .bg-\\[\\#0d0d1a\\] { background-color: ${bg0} !important; }
       .bg-\\[\\#111120\\] { background-color: ${bg1} !important; }
+      .bg-\\[\\#0a0a14\\] { background-color: ${sidebarBg} !important; }
+      .border-\\[\\#2a2a50\\] { border-color: ${borderPrimary} !important; }
+      .border-\\[\\#1e1e38\\] { border-color: ${borderSecondary} !important; }
+      
+      /* Typography & textual color propagates */
+      .text-slate-100, .text-white { color: ${text100} !important; }
+      .text-slate-200 { color: ${text200} !important; }
+      .text-slate-300 { color: ${text300} !important; }
+      .text-slate-400 { color: ${text400} !important; }
+      .text-slate-500 { color: ${text500} !important; }
+      
       ${extraCss}
     `;
   }
@@ -213,6 +1116,7 @@ import { AlertsView } from "./components/AlertsView";
 import { AiAnalystView } from "./components/AiAnalystView";
 import { FocusAudioView } from "./components/FocusAudioWidget";
 import { OnboardingModal } from "./components/OnboardingModal";
+import { ThemeAestheticBanner } from "./components/ThemeAestheticBanner";
 
 import {
   AlertCircle,
@@ -352,7 +1256,7 @@ const ReminderAlert = ({
   const isOnlySys = counts.sys > 0 && counts.user === 0;
 
   return (
-    <div className="fixed bottom-24 right-6 z-[60] animate-bounce pointer-events-auto">
+    <div className="fixed bottom-24 left-4 md:left-[226px] z-[60] animate-bounce pointer-events-auto">
       <div className="bg-[#111120] border-2 border-rose-500 p-3 rounded-xl shadow-[0_4px_24px_rgba(244,63,94,0.4)] flex items-center gap-3 transition">
         <div
           onClick={() => onNavigate(isOnlySys ? "alerts" : "reminders")}
@@ -390,6 +1294,22 @@ import { focusAudio } from "./utils/audioSystem";
 
 export default function App() {
   const [activeView, setActiveView] = useState<string>("dashboard");
+  const [viewHistory, setViewHistory] = useState<string[]>([]);
+
+  const handleNavigate = (newView: string) => {
+    if (newView !== activeView) {
+      setViewHistory((prev) => [...prev, activeView]);
+      setActiveView(newView);
+    }
+  };
+
+  const goBackView = () => {
+    if (viewHistory.length > 0) {
+      const prev = viewHistory[viewHistory.length - 1];
+      setViewHistory((prevHistory) => prevHistory.slice(0, -1));
+      setActiveView(prev);
+    }
+  };
   const [audioTrack, setAudioTrack] = useState("none");
   const [audioVolume, setAudioVolume] = useState(0.5);
 
@@ -467,6 +1387,16 @@ export default function App() {
 
   // Guide Modal
   const [guideModalOpen, setGuideModalOpen] = useState(false);
+  const [isAiAnalystClosed, setIsAiAnalystClosed] = useState(false);
+  const [isGuideFloaterClosed, setIsGuideFloaterClosed] = useState(false);
+  const [centerToast, setCenterToast] = useState<{ msg: string; sub?: string } | null>(null);
+
+  useEffect(() => {
+    if (centerToast) {
+      const tid = setTimeout(() => setCenterToast(null), 6000);
+      return () => clearTimeout(tid);
+    }
+  }, [centerToast]);
 
   // AI Analyst Modal
   const [aiModal, setAiModal] = useState<{
@@ -518,24 +1448,19 @@ export default function App() {
 I am providing you with my personal data exported from Omnilife Tracker. I want you to perform deep, advanced, personalized analysis to help me optimize my life, habits, productivity, and finances. 
 
 ### OMNILIFE TRACKER - SYSTEM ARCHITECTURE & DATA DICTIONARY:
-Omnilife Tracker is a 100% local, offline-first super-app. All my data is stored as a single JSON tree. You need to understand how the modules interlock to provide holistic insights:
+Omnilife Tracker is a 100% local, offline-first super-app. All my data is stored as a single JSON tree. You need to understand how the modules interlock perfectly to provide holistic insights:
 
-1. **Dashboard & Streaks**: The command node. Tracks daily completion rates and active habit streaks.
-2. **Daily Tracker (\`daily\`)**: [Date] -> [Category: 'health' | 'work' | 'learning' | 'personal'] -> [Task Name]. Contains \`completed\` (boolean), \`qty\` (number, e.g. hours or reps), \`skipped\` (boolean), \`notes\` (string).
-   -> *Analysis Note*: Look for days where completing one habit (e.g. sleep) correlates with completing another (e.g. work). Find gaps or "skipped" chains.
-3. **Daily Journal (\`journals\`)**: Nested by [Date]. Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`location\` (GPS string), \`tags\` (array), \`prompts\` (text responses), \`notes\` (freeform text).
-   -> *Analysis Note*: This is critical. Correlate \`mood\` and \`energy\` with the \`daily\` habit completion rates. Does low energy follow high spending? Does high mood follow exercise?
-4. **Goals & Targets (\`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Contains target \`reps\` and target \`hours\` for specific tasks. The app aggregates \`daily\` logs and \`pomoSessions\` to calculate progress.
-5. **Finances (\`finances\`)**: Contains \`accounts\` (name, balance, type), \`transactions\` (amount, category, type: 'income' | 'expense', and array of \`tasks\` for financial goals). We run analysis against \`financeBudgets\`.
-   -> *Analysis Note*: Analyze my burn rate and financial goals. Warn me if my expenses exceed my income trajectory or budget limits. Check if my manual financial tasks/goals are being met.
-6. **Expeditions (\`expeditions\`)**: My trip planner with itinerary dates, packing lists, custom goals (\`customTasks\`), and locations. Can be linked to Alerts, Reminders, and Calendar seamlessly. Note that expeditions directly trigger alert timelines.
-7. **Pomodoro (\`pomoSessions\`)**: Focus timer logs. Array of { taskName, category, durationMinutes, timestamp }. Heavily integrated with Focus Audio.
-   -> *Analysis Note*: Cross-reference these with my \`goals\` and \`daily\` tasks. Am I actually spending time effectively? Does Focus Audio ("brown noise," "rain," etc.) correlate with longer sessions?
-8. **Reminders (\`reminders\`)**: One-off and recurring tasks with \`priority\` ('high'|'medium'|'low'), \`dueDate\`, \`time\`, and \`enableAlert\`. Reminders are directly spawned from Expeditions and Finances for billing and trip alerts.
-9. **Focus Audio**: Embedded ambient audio states. Notice how audio states integrate directly with Pomodoro sessions to lower stress and induce flow.
-10. **Sketchpad**: Digital drawing tools (not purely data).
-11. **Settings / Theme**: Custom Neon Color profiles are stored in \`neonTheme\`. UI structural themes ('minimal', 'retro', 'cute', 'midnight', 'crimson', 'playful') are stored in \`bgTheme\`.
-12. **Synopsis**: Digested logs are sent directly to Email, Telegram, and SMS through the frontend gateways.
+1. **Dashboard & Streaks**: The command node. Tracks daily completion rates, active habit streaks, features 50 high-contrast custom SYSTEM COLOR PALETTES and 22 creative UI THEMES with dynamic quotes banners (which can be closed and restored instantly using the glowing green button). Includes a real-time Bio-Climate & Environment Desk parsing live meteorological APIs to track actual temperatures, Air Quality Index (AQI), and wind telemetry based on custom geolocated city searches or device GPS.
+2. **Daily Tracker (\`daily\`)**: [Date] -> [Category: 'health' | 'work' | 'learning' | 'personal'] -> [Task Name]. Contains \`completed\` (boolean), \`qty\` (number, e.g. hours or reps), \`skipped\` (boolean), \`notes\` (string), and \`satisfaction\` (emotional ratings from 1-5).
+   -> *Analysis Note*: Look for days where completing one habit correlates directly with positive emotion ratings and daily consistency.
+3. **Daily Journal (\`journals\`)**: Nested by [Date]. Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\` (array), and \`sketches\` (an array of base64 drawing data URLs from the sketchpad view).
+   -> *Analysis Note*: Correlate mood and energy with drawing activity and daily checker progress.
+4. **Goals & Targets (\`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Contains target \`reps\` and target \`hours\` for specific tasks. Supports automatic calculation or manual overrides.
+5. **Finances (\`finances\`)**: Contains \`accounts\` (name, balance, type), \`transactions\` (amount, category, type: 'income' | 'expense'), \`financeBudgets\` (assigned monthly categories), and financial saving projects featuring sub-task progress metrics/checkbox lists and billing alert schedules.
+6. **Expeditions (\`expeditions\`)**: My trip planner with itinerary dates, packing checkmarks, custom task grids, locator positions, and flight/itinerary travel alarms.
+7. **Pomodoro Focus (\`pomoSessions\`)**: Focus timer logs, allowing users to spawn tasks instantly and optionally write/save them permanently onto the Daily Checklist.
+8. **Reminders (\`reminders\`)**: Core alarm modules populated in the Calendar. Directly integrated with billing dates from Finances and travel countdowns from Expeditions.
+9. **Sketchpad (\`sketches\`)**: Dynamic advanced digital sketchpad drawing entries with geometric shapes (arrows, rectangles, lines, circles), specialized brushes (marker, neon glow highlighter, spray mist airbrush, fine pen, eraser), full history undo/redo states, paper sheet style templates (ruled pages, grid notes, dot layers), and dynamic coupling features allowing users to link sketches directly to specific Daily Journal timelines and tags.
 
 ### MY CURRENT CONTEXT:
 I am currently viewing the [${activeView.toUpperCase()}] module. I am looking for insights specifically related to this view, but you should use the full context provided to give holistic advice.
@@ -547,15 +1472,13 @@ ${summaryText}
 
 ### INSTRUCTIONS FOR YOUR ANALYSIS:
 1. **Data Ingestion**: Thoroughly parse the provided JSON data. It represents my actual life metrics.
-2. **Correlation & Cross-Analysis**: Do not just summarize. Connect the dots.
-   - If \`journals\` and \`daily\` data are present: How do my habits directly impact my \`mood\` and \`energy\`?
-   - If \`finances\` and \`journals\` are present: Do I spend more money on low-energy days?
-   - If \`expeditions\` and \`finances\` are present: How do my travel trips impact my net balance? Are my budgets handling it well?
-   - If \`pomoSessions\` are present: How do different \`focus_audio\` tracks affect my Pomodoro productivity?
-   - What are my strongest consistency loops? Where are the breaking points in my streaks?
+2. **Correlation & Cross-Analysis**: Connect the dots:
+   - Analyze how my finances, budgets, and balance accounts correlate with my mood levels.
+   - Look at my Pomodoro focus sessions and assess if saving tasks to the checklist keeps my momentum high.
+   - Check if my sketch habits, travel excursions, and reminders prevent routine fatigue.
 3. **Advanced Personalization**: Base all advice *strictly* on the numbers and trends in the data. If I am failing a goal, point it out ruthlessly.
 4. **Actionable Roadmap**: Provide 3-5 specific, stoic, and immediately actionable steps I can take TODAY to fix weak points and accelerate my momentum.
-5. **Tone**: Be professional, analytical, objective, and highly strategic. Pretend you are Advising a high-performance executive.`;
+5. **Tone**: Be professional, analytical, objective, and highly strategic. Pretend you are advising a high-performance executive.`;
     }
 
     setAiModal({ isOpen: true, promptText: finalPrompt });
@@ -951,6 +1874,7 @@ ${summaryText}
     setPomoTaskCat(cat);
     setPomoTaskName(item);
     showToast(`POMO TARGET REGISTERED: ${item.toUpperCase()}`, "ok");
+    handleNavigate("pomo");
   };
 
   const handleSetPomoPreset = (preset: string) => {
@@ -1607,6 +2531,16 @@ ${summaryText}
     showToast(`BACKGROUND APPLIED: ${bgId.toUpperCase()}`, "ok");
   };
 
+  const handleSetFontFamily = (fontId: string) => {
+    setAppState((prev) => {
+      const next = { ...prev, fontFamily: fontId };
+      saveData(next);
+      return next;
+    });
+    const fontLabel = ALL_FONTS.find(f => f.id === fontId)?.label || fontId;
+    showToast(`FONT DEPLOYED: ${fontLabel.toUpperCase()}`, "ok");
+  };
+
   // Rendering screen routing selector
   const renderFocalScreen = () => {
     switch (activeView) {
@@ -1622,6 +2556,7 @@ ${summaryText}
             onOpenAIAnalyst={handleOpenAIAnalyst}
             onSetTheme={handleSetTheme}
             onSetBgTheme={handleSetBgTheme}
+            onSetFontFamily={handleSetFontFamily}
           />
         );
       case "daily":
@@ -1718,7 +2653,7 @@ ${summaryText}
           <CalendarView
             state={appState}
             onSetDate={setActiveDate}
-            onNavigate={setActiveView}
+            onNavigate={handleNavigate}
             dayStats={dayStats}
           />
         );
@@ -1728,6 +2663,7 @@ ${summaryText}
             state={appState}
             saveData={saveData}
             setAppState={setAppState}
+            onAddReminder={handleAddReminder}
           />
         );
       case "finances":
@@ -1736,6 +2672,7 @@ ${summaryText}
             state={appState}
             saveData={saveData}
             setAppState={setAppState}
+            onAddReminder={handleAddReminder}
           />
         );
       case "sketchpad":
@@ -1744,6 +2681,7 @@ ${summaryText}
             state={appState}
             saveData={saveData}
             setAppState={setAppState}
+            showToast={showToast}
           />
         );
       case "reminders":
@@ -1754,7 +2692,7 @@ ${summaryText}
             onEditReminder={handleEditReminder}
             onDeleteReminder={handleDeleteReminder}
             onToggleReminder={handleToggleReminder}
-            setView={setActiveView}
+            setView={handleNavigate}
           />
         );
       case "pomo":
@@ -1777,7 +2715,11 @@ ${summaryText}
             audioVolume={audioVolume}
             onSetAudioTrack={setAudioTrack}
             onSetAudioVolume={setAudioVolume}
-            onNavigate={setActiveView}
+            onNavigate={handleNavigate}
+            onSetPomoTask={(name, cat) => {
+              setPomoTaskName(name || null);
+              setPomoTaskCat(cat);
+            }}
           />
         );
       case "journal":
@@ -1943,9 +2885,10 @@ Omnilife Tracker is a 100% local, offline-first super-app. All my data is stored
    -> *Analysis Note*: Cross-reference these with my \`goals\` and \`daily\` tasks. Am I actually spending time effectively? Does Focus Audio ("brown noise," "rain," etc.) correlate with longer sessions?
 8. **Reminders (\`reminders\`)**: One-off and recurring tasks with \`priority\` ('high'|'medium'|'low'), \`dueDate\`, \`time\`, and \`enableAlert\`. Reminders are directly spawned from Expeditions and Finances for billing and trip alerts.
 9. **Focus Audio**: Embedded ambient audio states. Notice how audio states integrate directly with Pomodoro sessions to lower stress and induce flow.
-10. **Sketchpad**: Digital drawing tools (not purely data).
-11. **Settings / Theme**: Custom Neon Color profiles are stored in \`neonTheme\`. UI structural themes ('minimal', 'retro', 'cute', 'midnight', 'crimson', 'playful') are stored in \`bgTheme\`.
-12. **Synopsis**: Digested logs are sent directly to Email, Telegram, and SMS through the frontend gateways.
+10. **Sketchpad**: Advanced digital drawing tool equipped with vector geometric shapes, specialized brushes (spray, neon glow, pen, marker, eraser), complete undo/redo history, and patterns (grid, ruled, dots). Save sketches locally and attach directly to Daily Journal logs.
+11. **Settings / Theme Customization**: Custom color palette config, 20 custom structural typography layout layout engines, and 22 visual theme choices with customized aesthetic quotes, live banners, and stickers configured dynamically. The top visual banner can be closed for screen efficiency, and restored instantly in-place via the glowing green 'Restore Quote Banner' button.
+12. **Bio-Climate & Indoor/Outdoor Environment Desk**: Real-time environmental climate control deck. Tracks actual, real-time meteorological metrics (temperature, weather condition, windspeed, Air Quality Index AQI, and UV index) fetched dynamically via live geocoded coordinate searches or device GPS, alongside indoor sensory biome metrics (CO2 ppm, temperature, comfortable ranges, purifier controls). Used to analyze how ambient climate correlates with focus consistency.
+13. **Synopsis**: Digested metrics sent to Email, Telegram, and SMS.
    
 ### MY CURRENT CONTEXT:
 I am submitting data for the module: [${module.toUpperCase()}]. Focus your analysis primarily on this dataset, but weave in the greater context conceptually.
@@ -1983,7 +2926,7 @@ ${summaryText}
 
   return (
     <div className="flex h-screen bg-[#0d0d1a] text-slate-100 overflow-hidden font-sans">
-      <style>{getThemeCSS(appState.neonTheme, appState.bgTheme)}</style>
+      <style>{getThemeCSS(appState.neonTheme, appState.bgTheme, appState.fontFamily)}</style>
 
       {/* Conditionally hide floaters during onboarding */}
       {appState.hasSeenWelcome && (
@@ -2012,7 +2955,7 @@ ${summaryText}
         <Sidebar
           state={appState}
           activeView={activeView}
-          onNavigate={setActiveView}
+          onNavigate={handleNavigate}
           syncCfg={syncCfg}
           isSyncing={isSyncing}
           onExportJSON={handleExportJSON}
@@ -2043,6 +2986,36 @@ ${summaryText}
 
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 scrollbar-none w-full max-w-full">
           <div className="max-w-[1000px] mx-auto min-h-full flex flex-col pb-8">
+            {/* ↩ Dynamic Navigation Back Button */}
+            {viewHistory.length > 0 && (
+              <div className="mb-4">
+                <button
+                  onClick={goBackView}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#2a2a50] bg-[#111120] text-[#00ff88] hover:bg-[#00ff88]/10 hover:border-[#00ff88]/40 transition text-[9px] font-black uppercase tracking-widest leading-none font-mono cursor-pointer shadow-lg animate-fade-in"
+                >
+                  <span>← go back to {({
+                    dashboard: "Dashboard Command",
+                    daily: "Daily Tracker & Routines",
+                    analytics: "Analytics Panel",
+                    calendar: "Calendar Heatmap",
+                    expeditions: "Travel Expeditions",
+                    finances: "Finance Ledger",
+                    sketchpad: "Advanced Sketchpad & Log",
+                    reminders: "Reminders & Alerts",
+                    pomo: "Pomodoro Clock",
+                    guides: "Interactive Module Guide",
+                    synopsis: "Weekly Synopsis Control",
+                    search: "Deep Search Analyzer",
+                    settings: "System Vault Vault Core",
+                    focus_audio: "Focus Ambient Audio",
+                    ai_analyst: "AI Strategy Analyst"
+                  } as Record<string, string>)[viewHistory[viewHistory.length - 1]] || "previous page"}</span>
+                </button>
+              </div>
+            )}
+            {/* Theme Aesthetic Banner, Quotes, and Stickers */}
+            <ThemeAestheticBanner bgTheme={appState.bgTheme} />
+
             {/* Active viewport content */}
             {renderFocalScreen()}
           </div>
@@ -2052,13 +3025,40 @@ ${summaryText}
       {/* 3. Global Toasts chimes notifications */}
       {toast && (
         <div
-          className={`fixed bottom-4 right-4 z-50 px-4 py-2 text-xs font-black rounded-lg border flex items-center gap-2 tracking-widest uppercase transition-all duration-300 font-mono shadow-[0_4px_16px_rgba(0,0,0,0.55)] ${
+          className={`fixed bottom-4 left-4 md:left-[240px] z-50 px-5 py-3 rounded-xl border flex items-center gap-2 tracking-widest uppercase transition-all duration-300 font-mono text-xs font-black shadow-[0_10px_30px_rgba(0,0,0,0.6)] border-l-4 animate-slide-in-left backdrop-blur-md ${
             toast.type === "ok"
-              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-              : "bg-[#ff6b1a]/10 text-[#ff6b1a] border-[#ff6b1a]/20"
+              ? "bg-[#0a0f1d]/85 text-emerald-400 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.25)]"
+              : "bg-[#181111]/85 text-[#ff6b1a] border-[#ff6b1a] shadow-[0_0_20px_rgba(255,107,26,0.25)]"
           }`}
         >
+          <span className="shrink-0 text-base">{toast.type === "ok" ? "✓" : "⚡"}</span>
           <span>// {toast.msg}</span>
+        </div>
+      )}
+
+      {/* Centered Notification Overlay for Floater Closures */}
+      {centerToast && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-fade-in font-sans">
+          <div className="bg-[#0b0f19] border-2 border-[#ff6b1a] text-slate-100 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-[0_0_50px_rgba(255,107,26,0.25)] relative overflow-hidden text-center flex flex-col items-center">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#ff6b1a] to-[#aa44ff]" />
+            <div className="flex flex-col items-center gap-3 text-[#ff6b1a]">
+              <Info size={36} className="animate-pulse" />
+              <h4 className="font-extrabold tracking-widest text-[#ff6b1a] text-xs uppercase font-mono">
+                {centerToast.msg}
+              </h4>
+            </div>
+            <p className="text-[11px] text-slate-300 font-medium leading-relaxed uppercase tracking-wider font-mono">
+              // {centerToast.sub}
+            </p>
+            <div className="pt-2 w-full">
+              <button
+                onClick={() => setCenterToast(null)}
+                className="w-full py-2.5 bg-[#ff6b1a]/10 hover:bg-[#ff6b1a]/20 border border-[#ff6b1a]/30 hover:border-[#ff6b1a] text-[#ff6b1a] rounded-xl text-[10px] font-black uppercase tracking-widest transition"
+              >
+                GOT IT ✓
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2222,26 +3222,60 @@ ${summaryText}
       {/* Floating global Actions */}
       {appState.hasSeenWelcome && (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
-          {!appState.hideGuideFloater && (
-            <button
-              onClick={() => setGuideModalOpen(true)}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-[#111120] border border-[#2a2a50] rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.8)] hover:border-[#00d4ff] text-[#00d4ff] transition-all duration-300 backdrop-blur-md"
-            >
-              <Info size={18} />
-              <span className="text-[10px] font-black uppercase tracking-widest leading-none">
-                Module Guide
-              </span>
-            </button>
+          {!isGuideFloaterClosed && (
+            <div className="relative font-sans">
+              <button
+                onClick={() => setGuideModalOpen(true)}
+                className="flex items-center justify-center gap-2 pl-4 pr-11 py-3 bg-[#111120] border border-[#2a2a50] rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.8)] hover:border-[#00d4ff] text-[#00d4ff] transition-all duration-300 backdrop-blur-md w-full text-left"
+              >
+                <Info size={18} />
+                <span className="text-[10px] font-black uppercase tracking-widest leading-none">
+                  Module Guide
+                </span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsGuideFloaterClosed(true);
+                  setCenterToast({
+                    msg: "MODULE GUIDE STOWED",
+                    sub: "The interactive Module Guide banner has been customized. Remember, you can still access full guides anytime by choosing the 'Module Guides' tab in the left sidebar directory."
+                  });
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#2a2a50]/60 hover:bg-[#ff6b1a]/20 border border-slate-700/50 hover:border-[#ff6b1a]/45 text-slate-400 hover:text-[#ff6b1a] transition"
+                title="Close and hide Module Guide button"
+              >
+                <X size={10} />
+              </button>
+            </div>
           )}
-          <button
-            onClick={handleOpenAIAnalyst}
-            className="flex items-center justify-center gap-2 px-4 py-3 bg-[#111120] border border-[#2a2a50] rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.8)] hover:border-[#00ff88] text-[#00ff88] transition-all duration-300 backdrop-blur-md"
-          >
-            <Bot size={18} />
-            <span className="text-[10px] font-black uppercase tracking-widest leading-none">
-              AI Analyst
-            </span>
-          </button>
+          {!isAiAnalystClosed && (
+            <div className="relative">
+              <button
+                onClick={handleOpenAIAnalyst}
+                className="flex items-center justify-center gap-2 pl-4 pr-11 py-3 bg-[#111120] border border-[#2a2a50] rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.8)] hover:border-[#00ff88] text-[#00ff88] transition-all duration-300 backdrop-blur-md w-full text-left"
+              >
+                <Bot size={18} />
+                <span className="text-[10px] font-black uppercase tracking-widest leading-none">
+                  AI Analyst
+                </span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsAiAnalystClosed(true);
+                  setCenterToast({
+                    msg: "AI STRATEGIST ARCHIVED",
+                    sub: "The floating strategic AI Analyst has been stowed safely under management control. You can prompt state analysis anytime from the menu sidebar directory."
+                  });
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#2a2a50]/60 hover:bg-[#ff6b1a]/20 border border-slate-700/50 hover:border-[#ff6b1a]/45 text-slate-400 hover:text-[#ff6b1a] transition"
+                title="Close and hide AI Analyst button"
+              >
+                <X size={10} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -2250,7 +3284,11 @@ ${summaryText}
         onClose={() => setGuideModalOpen(false)}
         activeView={activeView}
         onHideFloater={() => {
-          setAppState((prev) => ({ ...prev, hideGuideFloater: true }));
+          setIsGuideFloaterClosed(true);
+          setCenterToast({
+            msg: "MODULE GUIDE STOWED",
+            sub: "The interactive Module Guide banner has been customized. Remember, you can still access full guides anytime by choosing the 'Module Guides' tab in the left sidebar directory."
+          });
         }}
       />
 

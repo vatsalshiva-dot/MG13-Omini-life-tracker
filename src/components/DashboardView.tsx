@@ -2,6 +2,7 @@ import React from "react";
 import { AppState, TrackerCategory } from "../types";
 import { fmtDate, fmtShort, getWeek } from "../utils/date";
 import { CATS } from "../utils/storage";
+import { DashboardWeather } from "./DashboardWeather";
 import {
   Play,
   Calendar,
@@ -11,6 +12,7 @@ import {
   Check,
   Award,
   TrendingUp,
+  Type,
 } from "lucide-react";
 
 interface DashboardViewProps {
@@ -20,6 +22,7 @@ interface DashboardViewProps {
   onSetDate: (date: string) => void;
   onSetTheme: (themeHex: string) => void;
   onSetBgTheme: (bgId: string) => void;
+  onSetFontFamily: (fontId: string) => void;
   getDayD: (ds: string, cat: TrackerCategory, item: string) => any;
   onOpenAIAnalyst?: (prompt?: string) => void;
   dayStats: (ds: string) => {
@@ -42,12 +45,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSetDate,
   onSetTheme,
   onSetBgTheme,
+  onSetFontFamily,
   getDayD,
   dayStats,
   onOpenAIAnalyst,
 }) => {
   const today = activeDate; // Using current state date as viewport focal point
   const stats = dayStats(today);
+
+  // Expanded panel toggler states
+  const [showAllColors, setShowAllColors] = React.useState(false);
+  const [showAllThemes, setShowAllThemes] = React.useState(false);
+  const [isCustomizerOpen, setIsCustomizerOpen] = React.useState(false);
+
+  const [bannerClosed, setBannerClosed] = React.useState(() => {
+    return typeof window !== "undefined" && localStorage.getItem("omnilife_banner_closed") === "true";
+  });
+
+  React.useEffect(() => {
+    const handleToggle = () => {
+      setBannerClosed(localStorage.getItem("omnilife_banner_closed") === "true");
+    };
+    window.addEventListener("omnilife_banner_toggle", handleToggle);
+    return () => {
+      window.removeEventListener("omnilife_banner_toggle", handleToggle);
+    };
+  }, []);
 
   // Greet depending on time of day
   const hours = new Date().getHours();
@@ -151,60 +174,205 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
 
   return (
     <div className="space-y-6">
-      {/* Theme Selector */}
-      <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-4 flex flex-col sm:flex-row gap-6 sm:gap-8">
-        <div className="flex-1">
-          <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono pb-2">
-            SYSTEM COLOR PALETTES
-          </h3>
-          <div className="flex flex-wrap gap-3">
-            {[
-              { id: "Volcanic Orange", hex: "#ff6b1a" },
-              { id: "Cyber Cyan", hex: "#00d4ff" },
-              { id: "Matrix Green", hex: "#00ff88" },
-              { id: "Synthetic Purple", hex: "#aa44ff" },
-              { id: "Neon Rose", hex: "#ff0055" },
-            ].map((theme) => (
-              <div
-                key={theme.id}
-                onClick={() => onSetTheme(theme.hex)}
-                className={`w-6 h-6 rounded-full cursor-pointer border-2 transition ${state.neonTheme === theme.hex || (!state.neonTheme && theme.hex === "#ff6b1a") ? "border-white scale-110 shadow-md" : "border-transparent opacity-50 hover:opacity-100"}`}
-                style={{
-                  backgroundColor: theme.hex,
-                  boxShadow:
-                    state.neonTheme === theme.hex ||
-                    (!state.neonTheme && theme.hex === "#ff6b1a")
-                      ? `0 0 10px ${theme.hex}`
-                      : "none",
-                }}
-                title={theme.id}
-              />
-            ))}
+      {/* Collapsible Aesthetic Customizer at Top - Takes <= 1/5th screen space */}
+      <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-3 shadow-lg select-none">
+        <div 
+          onClick={() => setIsCustomizerOpen(!isCustomizerOpen)} 
+          className="flex items-center justify-between cursor-pointer text-slate-200 hover:text-white"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-widest text-[#00ff88] font-mono">🎨 Theme & Accent Customizer</span>
+            <span className="text-[10px] bg-[#ff6b1a]/15 text-[#ff6b1a] px-2 py-0.5 rounded font-bold font-mono">
+              Mode: {state.bgTheme || 'midnight'} / Accent: {state.neonTheme || '#ff6b1a'} / Font: {state.fontFamily || 'inter'}
+            </span>
           </div>
+          <button className="text-[10px] uppercase font-black text-[#00d4ff] hover:underline font-mono">
+            {isCustomizerOpen ? "[ Close Aesthetics ▴ ]" : "[ Customize Colors, Themes & Fonts ▾ ]"}
+          </button>
         </div>
-        <div className="flex-1">
-          <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono pb-2">
-            UI THEMES & STYLES
-          </h3>
-          <div className="flex flex-wrap gap-2 sm:gap-3">
-            {[
-              { id: "midnight", label: "Default Modern (Dark)" },
-              { id: "retro", label: "Pop Art Retro (Light)" },
-              { id: "minimal", label: "Minimal Light (Light)" },
-              { id: "cute", label: "Soft Pastel (Light)" },
-              { id: "playful", label: "Vibrant Joy (Light)" },
-            ].map((bg) => (
-              <div
-                key={bg.id}
-                onClick={() => onSetBgTheme(bg.id)}
-                className={`px-3 py-1 text-[10px] uppercase font-bold rounded cursor-pointer border transition ${state.bgTheme === bg.id || (!state.bgTheme && bg.id === "midnight") ? "border-[#ff6b1a] text-[#ff6b1a] shadow-md shadow-indigo-500/10" : "border-[#2a2a50] text-slate-400 hover:text-slate-200"}`}
-                title={bg.label}
-              >
-                {bg.label}
+
+        {isCustomizerOpen && (
+          <>
+            <div className="mt-3 pt-3 border-t border-[#2a2a50]/60 grid grid-cols-1 lg:grid-cols-3 gap-4 animate-fadeIn text-left">
+            {/* Color swatches */}
+            <div className="space-y-2 p-1">
+              <span className="text-[9px] text-[#ff6b1a] block tracking-wider font-extrabold uppercase font-mono">
+                System Accents (50 Color Palettes)
+              </span>
+              <div className="flex flex-wrap gap-1.5 max-h-[85px] overflow-y-auto pr-1">
+                {(() => {
+                  const allPalettes = [
+                    { id: "Volcanic Orange", hex: "#ff6b1a" },
+                    { id: "Blaze Gold", hex: "#ffaa00" },
+                    { id: "Cyber Cyan", hex: "#00d4ff" },
+                    { id: "Matrix Green", hex: "#00ff88" },
+                    { id: "Alien Lime", hex: "#bbfb00" },
+                    { id: "Synthetic Purple", hex: "#aa44ff" },
+                    { id: "Vapor Pink", hex: "#ff00b8" },
+                    { id: "Polar Teal", hex: "#00fbc5" },
+                    { id: "Neon Rose", hex: "#ff0055" },
+                    { id: "Electric Yellow", hex: "#fbff00" },
+                    { id: "Crimson Red", hex: "#ff2a2a" },
+                    { id: "Abyssal Blue", hex: "#4477ff" },
+                    { id: "Solar Fire", hex: "#ff4500" },
+                    { id: "Mint Glow", hex: "#39ff14" },
+                    { id: "Deep Sea Emerald", hex: "#00b2a9" },
+                    { id: "Orchid Blossom", hex: "#e066ff" },
+                    { id: "Copper Flare", hex: "#d97706" },
+                    { id: "Sunset Coral", hex: "#f43f5e" },
+                    { id: "Electric Violet", hex: "#8b5cf6" },
+                    { id: "Sunset Rose", hex: "#e11d48" },
+                    { id: "Lagoon Teal", hex: "#14b8a6" },
+                    { id: "Glacial Blue", hex: "#22d3ee" },
+                    { id: "Retro Bronze", hex: "#b45309" },
+                    { id: "Fairy Orchid", hex: "#d946ef" },
+                    { id: "Fresh Citrus", hex: "#eab308" },
+                    { id: "Emerald Crest", hex: "#059669" },
+                    { id: "Soft Lavender", hex: "#c084fc" },
+                    { id: "Bubblegum Neon", hex: "#f472b6" },
+                    { id: "Plasma Pink", hex: "#ff1493" },
+                    { id: "Toxic Lime", hex: "#99ff00" },
+                    { id: "Deep Sapphire", hex: "#2563eb" },
+                    { id: "Hot Rose", hex: "#ec4899" },
+                    { id: "Cherry Blossom", hex: "#ffb7c5" },
+                    { id: "Pistachio Delight", hex: "#93c572" },
+                    { id: "Sunset Gold", hex: "#ff8c00" },
+                    { id: "Desert Camel", hex: "#c19a6b" },
+                    { id: "Galaxy Magenta", hex: "#d10056" },
+                    { id: "Imperial Jade", hex: "#00a86b" },
+                    { id: "Royal Indigo", hex: "#3f00ff" },
+                    { id: "Cosmic Purple", hex: "#5d3fd3" },
+                    { id: "Lava Ash", hex: "#4a4b4d" },
+                    { id: "Coral Pink", hex: "#f88379" },
+                    { id: "Cyber Punch", hex: "#ff007f" },
+                    { id: "Arctic Mint", hex: "#bef264" },
+                    { id: "Sky Breeze", hex: "#0ea5e9" },
+                    { id: "Champagne Gold", hex: "#f7e7ce" },
+                    { id: "Rusty Clay", hex: "#b45309" },
+                    { id: "Amethyst Sky", hex: "#9d4edd" },
+                    { id: "Toxic Lemon", hex: "#dfff00" },
+                    { id: "Electric Grape", hex: "#6f2da8" },
+                  ];
+                  return allPalettes.map((tmpl) => (
+                    <div
+                      key={tmpl.id}
+                      onClick={() => onSetTheme(tmpl.hex)}
+                      className={`w-4 h-4 rounded-full cursor-pointer transition ${state.neonTheme === tmpl.hex || (!state.neonTheme && tmpl.hex === "#ff6b1a") ? "ring-2 ring-white scale-110" : "opacity-60 hover:opacity-100"}`}
+                      style={{ backgroundColor: tmpl.hex }}
+                      title={tmpl.id}
+                    />
+                  ));
+                })()}
               </div>
-            ))}
+            </div>
+
+            {/* Theme engines */}
+            <div className="space-y-2 p-1">
+              <span className="text-[9px] text-[#aa44ff] block tracking-wider font-extrabold uppercase font-mono">
+                Visual Modes (22 Theme Engines)
+              </span>
+              <div className="flex flex-wrap gap-1 max-h-[85px] overflow-y-auto pr-1">
+                {(() => {
+                  const allThemes = [
+                    { id: "midnight", label: "Default Modern (Dark)" },
+                    { id: "superhero", label: "Cyber Avenger (Superhero)" },
+                    { id: "teens", label: "Vapor Violet (Gen Z)" },
+                    { id: "swiss", label: "Swiss Mono (High-Contrast)" },
+                    { id: "retro", label: "Pop Art Retro (Light)" },
+                    { id: "minimal", label: "Minimal Light (Light)" },
+                    { id: "cute", label: "Soft Pastel (Light)" },
+                    { id: "playful", label: "Vibrant Joy (Light)" },
+                    { id: "crimson", label: "Crimson Void (Dark)" },
+                    { id: "hacker", label: "Terminal Hacker (Dark)" },
+                    { id: "forest", label: "Redwood Canopy (Forest)" },
+                    { id: "luxury", label: "Imperial Velvet (Luxury)" },
+                    { id: "cyberpunk", label: "Chrome Synth (Cyberpunk)" },
+                    { id: "milkyway", label: "Cosmic Nebula (Milkyway)" },
+                    { id: "ocean", label: "Bioluminescent (Ocean)" },
+                    { id: "cars", label: "F1 Grand Prix (Cars)" },
+                    { id: "sports", label: "Stadium Turf (Sports)" },
+                    { id: "wildwest", label: "Dusty Saloon (Old West)" },
+                    { id: "futuristic", label: "Utopian Glass (Futuristic)" },
+                    { id: "proper3d", label: "Raised Neumorphism (3D)" },
+                    { id: "proper2d", label: "Comic Dot Pop-Art (2D)" },
+                    { id: "mafia", label: "La Famiglia Noir (Mafia)" },
+                  ];
+                  return allThemes.map((bg) => (
+                    <div
+                      key={bg.id}
+                      onClick={() => onSetBgTheme(bg.id)}
+                      className={`px-2 py-1 text-[8px] font-bold rounded cursor-pointer border transition ${state.bgTheme === bg.id || (!state.bgTheme && bg.id === "midnight") ? "border-[#ff6b1a] text-[#ff6b1a] bg-[#ff6b1a]/5" : "border-[#2a2a50] text-slate-400 hover:text-slate-200"}`}
+                      title={bg.label}
+                    >
+                      {bg.label.replace(/ \(.+\)/, '')}
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+
+            {/* Typography Engines */}
+            <div className="space-y-2 p-1">
+              <span className="text-[9px] text-[#00d4ff] block tracking-wider font-extrabold uppercase font-mono">
+                Typography Engines (20 Premium Fonts)
+              </span>
+              <div className="flex flex-wrap gap-1 max-h-[85px] overflow-y-auto pr-1">
+                {(() => {
+                  const allFonts = [
+                    { id: "inter", label: "Inter", family: '"Inter", sans-serif' },
+                    { id: "space_grotesk", label: "Space Grotesk", family: '"Space Grotesk", sans-serif' },
+                    { id: "jetbrains_mono", label: "JetBrains Mono", family: '"JetBrains Mono", monospace' },
+                    { id: "fira_code", label: "Fira Code", family: '"Fira Code", monospace' },
+                    { id: "vt323", label: "VT323 (8-Bit)", family: '"VT323", monospace' },
+                    { id: "quicksand", label: "Quicksand", family: '"Quicksand", sans-serif' },
+                    { id: "playfair_display", label: "Playfair Display", family: '"Playfair Display", serif' },
+                    { id: "outfit", label: "Outfit", family: '"Outfit", sans-serif' },
+                    { id: "cabin_sketch", label: "Cabin Sketch", family: '"Cabin Sketch", cursive' },
+                    { id: "bebas_neue", label: "Bebas Neue", family: '"Bebas Neue", sans-serif' },
+                    { id: "cinzel", label: "Cinzel", family: '"Cinzel", serif' },
+                    { id: "syne", label: "Syne", family: '"Syne", sans-serif' },
+                    { id: "fredoka", label: "Fredoka", family: '"Fredoka", sans-serif' },
+                    { id: "unbounded", label: "Unbounded", family: '"Unbounded", sans-serif' },
+                    { id: "inconsolata", label: "Inconsolata", family: '"Inconsolata", monospace' },
+                    { id: "montserrat", label: "Montserrat", family: '"Montserrat", sans-serif' },
+                    { id: "cardo", label: "Cardo", family: '"Cardo", serif' },
+                    { id: "righteous", label: "Righteous", family: '"Righteous", sans-serif' },
+                    { id: "dm_serif", label: "DM Serif", family: '"DM Serif Display", serif' },
+                    { id: "press_start", label: "Press Start", family: '"Press Start 2P", monospace' }
+                  ];
+                  return allFonts.map((f) => (
+                    <div
+                      key={f.id}
+                      onClick={() => onSetFontFamily(f.id)}
+                      className={`px-2 py-0.5 text-[8px] font-bold rounded cursor-pointer border transition ${state.fontFamily === f.id || (!state.fontFamily && f.id === "inter") ? "border-[#ff6b1a] text-[#ff6b1a] bg-[#ff6b1a]/5" : "border-[#2a2a50] text-slate-400 hover:text-slate-200"}`}
+                      style={{ fontFamily: f.family }}
+                      title={f.label}
+                    >
+                      {f.label}
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
           </div>
-        </div>
+          
+          {/* Invisible/Sleek Toggle for Aesthetic banners & custom quotes */}
+          <div className="mt-3 pt-2.5 border-t border-[#2a2a50]/40 flex flex-col sm:flex-row sm:items-center sm:justify-between text-[10px] font-mono text-slate-500 gap-2">
+            <span>🌌 SYSTEM COMPONENT VISIBILITY: AMBIENT THEME MATRIX</span>
+            <button
+              onClick={() => {
+                const nextClosed = !bannerClosed;
+                localStorage.setItem("omnilife_banner_closed", nextClosed ? "true" : "false");
+                setBannerClosed(nextClosed);
+                window.dispatchEvent(new Event("omnilife_banner_toggle"));
+              }}
+              className="px-2.5 py-1 rounded bg-[#ff6b1a]/10 hover:bg-[#ff6b1a]/25 border border-[#ff6b1a]/30 text-slate-350 hover:text-[#00ff88] transition cursor-pointer font-black tracking-wider uppercase inline-flex items-center gap-1 self-start sm:self-auto"
+            >
+              {bannerClosed ? "👁️ Retrieve Ambient Theme Banner" : "🙈 Dismiss Ambient Tone Banner"}
+            </button>
+          </div>
+        </>
+      )}
       </div>
 
       {/* Overview Head */}
@@ -307,6 +475,9 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
           <p className="text-[10px] text-slate-500 mt-1">active days</p>
         </div>
       </div>
+
+      {/* Climate & Biosphere Station Console */}
+      <DashboardWeather />
 
       {/* Two Column Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

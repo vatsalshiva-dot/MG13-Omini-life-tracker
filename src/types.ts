@@ -101,6 +101,16 @@ export interface FinanceTask {
   done: boolean;
 }
 
+export interface FinancialGoal {
+  id: string;
+  title: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadlineDate: string;
+  category: string;
+  tasks: FinanceTask[];
+}
+
 export interface ExpeditionExpense {
   id: string;
   date: string;
@@ -169,9 +179,11 @@ export interface AppState {
   journalTags: string[];
   expeditions: ExpeditionEntry[];
   finances: ExpeditionExpense[];
+  financeGoals?: FinancialGoal[];
   sketches: SketchEntry[];
   muteGhostAlerts?: boolean;
   neonTheme?: string;
   bgTheme?: string;
+  fontFamily?: string;
   hideGuideFloater?: boolean;
 }
