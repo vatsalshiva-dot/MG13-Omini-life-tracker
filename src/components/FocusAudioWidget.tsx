@@ -11,15 +11,17 @@ interface FocusAudioViewProps {
 export const FocusAudioView: React.FC<FocusAudioViewProps> = ({ activeTrack, volume, onSetTrack, onSetVolume }) => {
   const tracks = [
     { id: 'none', label: 'Off / Silence', icon: <X size={20} /> },
-    { id: 'brown', label: 'Deep Focus (Brown Noise)', icon: <Wind size={20} /> },
+    { id: 'brown', label: 'Deep Focus (Brown)', icon: <Wind size={20} /> },
+    { id: 'binaural_alpha', label: 'Alpha (10Hz Flow)', icon: <Headphones size={20} /> },
+    { id: 'binaural_beta', label: 'Beta (20Hz Alert)', icon: <Headphones size={20} /> },
+    { id: 'binaural_theta', label: 'Theta (6Hz Deep)', icon: <Headphones size={20} /> },
+    { id: 'binaural_delta', label: 'Delta (2Hz Sleep)', icon: <Headphones size={20} /> },
     { id: 'rain', label: 'Light Rain', icon: <Droplets size={20} /> },
     { id: 'thunderstorm', label: 'Thunderstorms', icon: <CloudLightning size={20} /> },
     { id: 'water', label: 'River Stream', icon: <Waves size={20} /> },
     { id: 'crackle', label: 'Campfire', icon: <Wind size={20} /> },
     { id: 'cafe', label: 'Bustling Cafe', icon: <Coffee size={20} /> },
-    { id: 'flute', label: 'Flute Meditation', icon: <Music size={20} /> },
     { id: 'ambient', label: 'Deep Space Drone', icon: <Music size={20} /> },
-    { id: 'instrumental', label: 'Focus Synthesizer', icon: <Music size={20} /> },
   ];
 
   return (

@@ -11,6 +11,56 @@ class FocusAudioEngine {
   private currentType: string = 'none';
   private rumbleInterval: any = null;
 
+  startBinaural(type: string) {
+     if (!this.ctx) return;
+     const freq1 = type === 'binaural_alpha' ? 432 : type === 'binaural_beta' ? 440 : type === 'binaural_theta' ? 256 : 220; // Base Frequency
+     const diff = type === 'binaural_alpha' ? 10 : type === 'binaural_beta' ? 20 : type === 'binaural_theta' ? 6 : 2; // Beat Frequency difference
+
+     this.gainNode = this.ctx.createGain();
+     this.gainNode.connect(this.ctx.destination);
+     this.gainNode.gain.value = 0.5; 
+
+     this.osc1 = this.ctx.createOscillator();
+     this.osc2 = this.ctx.createOscillator();
+
+     this.osc1.type = 'sine';
+     this.osc2.type = 'sine';
+     
+     this.osc1.frequency.value = freq1;
+     this.osc2.frequency.value = freq1 + diff;
+
+     // Stereo panner
+     const panL = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+     const panR = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+
+     if (panL && panR) {
+        panL.pan.value = -1;
+        panR.pan.value = 1;
+
+        this.osc1.connect(panL);
+        panL.connect(this.gainNode);
+
+        this.osc2.connect(panR);
+        panR.connect(this.gainNode);
+     } else {
+        this.osc1.connect(this.gainNode);
+        this.osc2.connect(this.gainNode);
+     }
+
+     // Gentle background drone to make it pleasant
+     this.osc3 = this.ctx.createOscillator();
+     this.osc3.type = 'triangle';
+     this.osc3.frequency.value = freq1 / 2;
+     const droneGain = this.ctx.createGain();
+     droneGain.gain.value = 0.1;
+     this.osc3.connect(droneGain);
+     droneGain.connect(this.gainNode);
+
+     this.osc1.start(0);
+     this.osc2.start(0);
+     this.osc3.start(0);
+  }
+
   start(type: string) {
     this.stop();
     if (type === 'none') return;
@@ -23,6 +73,12 @@ class FocusAudioEngine {
     // We can synthesize drones differently from noise
     if (type === 'flute' || type === 'ambient' || type === 'instrumental') {
         this.startDrone(type);
+        return;
+    }
+
+    // Binaural Beats
+    if (type.startsWith('binaural_')) {
+        this.startBinaural(type);
         return;
     }
 

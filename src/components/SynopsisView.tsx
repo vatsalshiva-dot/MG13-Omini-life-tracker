@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppState, TrackerCategory } from '../types';
 import { fmtShort, fmtDate, todayStr, getWeek } from '../utils/date';
-import { CATS } from '../utils/storage';
+import {  CATS , getCatLabel } from '../utils/storage';
 import { Share2, Copy, FileText, Printer, Download, BookOpen, Layout, Globe, Mail, Calendar } from 'lucide-react';
 
 interface SynopsisViewProps {
@@ -74,6 +74,17 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
     let reps = 0;
     let satSum = 0;
     let satCnt = 0;
+    
+    let totalIncome = 0;
+    let totalSpent = 0;
+    
+    (state.finances || []).forEach(tx => {
+       if (dates.includes(tx.date)) {
+           if (tx.type === 'income') totalIncome += tx.amount;
+           else totalIncome -= 0;
+           if (tx.type === 'expense') totalSpent += tx.amount;
+       }
+    });
 
     const catD: Record<string, { done: number; total: number; hrs: number; reps: number }> = {};
     CATS.forEach(c => {
@@ -138,7 +149,9 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
       pct: total ? Math.round((done / total) * 100) : 0,
       catD,
       bestDay: bestDayDate ? { date: bestDayDate, pct: bestDayPct } : null,
-      days: dates.length
+      days: dates.length,
+      totalIncome,
+      totalSpent
     };
   }, [dates, state, getDayD, dayStats]);
 
@@ -160,6 +173,10 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
       `😊 Sat      : ${stats.sat}/5`,
       `📅 Days     : ${stats.days}`,
       '',
+      `💵 INCOME   : $${stats.totalIncome.toFixed(2)}`,
+      `💸 SPENT    : $${stats.totalSpent.toFixed(2)}`,
+      `🏷️ PROFIT   : $${(stats.totalIncome - stats.totalSpent).toFixed(2)}`,
+      '',
       '── CATEGORY SUMMARY BREAKDOWN ─────────'
     ];
 
@@ -169,7 +186,7 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
       const barCount = Math.round(pct / 10);
       let bar = '';
       for (let i = 0; i < 10; i++) bar += i < barCount ? '█' : '░';
-      lines.push(`${c.icon} ${c.label.slice(0, 10).padEnd(10)} [${bar}] ${pct}%  ${cd.hrs.toFixed(1)}h  ×${cd.reps}`);
+      lines.push(`${c.icon} ${getCatLabel(state, c.id).slice(0, 10).padEnd(10)} [${bar}] ${pct}%  ${cd.hrs.toFixed(1)}h  ×${cd.reps}`);
     });
 
     if (stats.bestDay) {
@@ -181,7 +198,7 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
     CATS.forEach(c => {
       (state.items[c.id] || []).forEach(it => {
         if (getDayD(today, c.id, it).status === 'pending') {
-          pendingTodayItems.push(`  • ${it} [${c.label}]`);
+          pendingTodayItems.push(`  • ${it} [${getCatLabel(state, c.id)}]`);
         }
       });
     });
@@ -239,6 +256,9 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
       `| 🔁 Finished Reps | **${stats.reps}** |`,
       `| Avg Rating Satisfaction | **${stats.sat} / 5** |`,
       `| Scoped Days Sample | **${stats.days} days** |`,
+      `| 💵 Total Income    | **$${stats.totalIncome.toFixed(2)}** |`,
+      `| 💸 Total Spent     | **$${stats.totalSpent.toFixed(2)}** |`,
+      `| 🏷️ Net Profit      | **$${(stats.totalIncome - stats.totalSpent).toFixed(2)}** |`,
       '',
       '### Category Progression Summary',
       ''
@@ -247,7 +267,7 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
     CATS.forEach(c => {
       const cd = stats.catD[c.id];
       const pct = cd.total ? Math.round((cd.done / cd.total) * 100) : 0;
-      lines.push(`- **${c.icon} ${c.label}** : ${cd.done}/${cd.total} finished (**${pct}%**) · Logged **${cd.hrs.toFixed(1)}h** · Completed **${cd.reps}** reps`);
+      lines.push(`- **${c.icon} ${getCatLabel(state, c.id)}** : ${cd.done}/${cd.total} finished (**${pct}%**) · Logged **${cd.hrs.toFixed(1)}h** · Completed **${cd.reps}** reps`);
     });
 
     const mdown = lines.join('\n');
@@ -340,7 +360,7 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
       </div>
 
       {/* Grid boxes summaries */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <div className="bg-[#0d0d1a] border border-[#1e1e38] p-3 rounded-lg text-center">
           <span className="text-[10px] tracking-widest text-slate-500 font-semibold block uppercase">DONE ACTION TARGETS</span>
           <span className="text-xl font-black mt-1 text-emerald-400">{stats.done} Checkins</span>
@@ -356,6 +376,14 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
         <div className="bg-[#0d0d1a] border border-[#1e1e38] p-3 rounded-lg text-center">
           <span className="text-[10px] tracking-widest text-slate-500 font-semibold block uppercase">TOTAL REPS</span>
           <span className="text-xl font-black mt-1 text-[#aa44ff]">{stats.reps} cycles</span>
+        </div>
+        <div className="bg-[#0d0d1a] border border-[#1e1e38] p-3 rounded-lg text-center">
+          <span className="text-[10px] tracking-widest text-[#00ff88] font-semibold block uppercase">TOTAL INCOME</span>
+          <span className="text-xl font-black mt-1 text-[#00ff88] font-mono">${stats.totalIncome.toFixed(0)}</span>
+        </div>
+        <div className="bg-[#0d0d1a] border border-[#1e1e38] p-3 rounded-lg text-center">
+          <span className="text-[10px] tracking-widest text-[#ff00a0] font-semibold block uppercase">TOTAL SPENT</span>
+          <span className="text-xl font-black mt-1 text-[#ff00a0] font-mono">${stats.totalSpent.toFixed(0)}</span>
         </div>
       </div>
 
@@ -373,7 +401,7 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
               <div key={c.id} className="p-3 bg-[#111120] border border-[#1e1e38] rounded-lg space-y-1.5 hover:border-slate-800 transition">
                 <div className="flex text-xs font-bold uppercase justify-between">
                   <span style={{ color: c.neon }} className="font-extrabold flex items-center gap-1">
-                    {c.icon} {c.label}
+                    {c.icon} {getCatLabel(state, c.id)}
                   </span>
                   <span className="text-slate-400 font-mono">
                     {cd.done}/{cd.total} done ({pct}%)

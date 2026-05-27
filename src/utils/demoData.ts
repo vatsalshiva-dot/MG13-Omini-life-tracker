@@ -8,6 +8,8 @@ function createDemoData(): AppState {
     name: "Demo Explorer",
     tagline: "Consistent Achiever",
     email: "hello@example.com",
+    dailyBudgetLimit: 50,
+    dailyIncomeTarget: 300,
   };
 
   state.items = {

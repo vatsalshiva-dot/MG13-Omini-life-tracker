@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppState, TrackerCategory } from '../types';
 import { MN, fmtShort, fmtDate } from '../utils/date';
-import { CATS } from '../utils/storage';
+import {  CATS , getCatLabel } from '../utils/storage';
 import { Calendar, Layers, X, ArrowRight } from 'lucide-react';
 
 interface CalendarViewProps {
@@ -188,7 +188,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <div className="flex items-center gap-2 border-b border-[#111120] pb-2 text-slate-300">
               <Layers size={13} style={{ color: cat.neon }} />
               <span className="text-xs font-black uppercase tracking-wider" style={{ color: cat.neon }}>
-                {cat.icon} {cat.label} Grid
+                {cat.icon} {getCatLabel(state, cat.id)} Grid
               </span>
             </div>
 
@@ -252,7 +252,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
       {/* Selected Day Modal popup */}
       {selectedDate && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[300] p-4">
           <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl w-full max-w-lg shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-[#2a2a50] bg-[#0d0d1a]">
               <h3 className="text-sm font-extrabold font-display uppercase tracking-widest text-white">DAY OVERVIEW <span className="text-[#00d4ff]">{fmtDate(selectedDate)}</span></h3>
@@ -337,19 +337,44 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               {(() => {
                 const fin = state.finances?.filter(f => f.date === selectedDate);
                 if (!fin || fin.length === 0) return null;
-                const total = fin.reduce((a, b) => b.type === 'income' ? a + b.amount : a - b.amount, 0);
+                const total = fin.reduce((a, b) => {
+                  const isInc = b.type === 'income' || b.type === 'credit' || b.type === 'loan_repaid';
+                  return isInc ? a + b.amount : a - b.amount;
+                }, 0);
                 return (
-                  <div className="bg-[#0d0d1a] border border-[#2a2a50] p-4 rounded-xl flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest font-mono mb-1">Finances ({fin.length})</p>
-                      <p className={`text-lg font-black font-mono ${total >= 0 ? 'text-[#00ff88]' : 'text-rose-500'}`}>${total.toFixed(2)}</p>
+                  <div className="bg-[#0d0d1a] border border-[#2a2a50] p-4 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#2a2a50]/50 pb-2">
+                      <div>
+                        <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest font-mono mb-0.5">Finances ({fin.length})</p>
+                        <p className={`text-base font-black font-mono ${total >= 0 ? 'text-[#00ff88]' : 'text-rose-500'}`}>
+                          {total >= 0 ? '+' : ''}${total.toFixed(2)}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => { onNavigate('finances'); }}
+                        className="bg-[#2a2a50] hover:bg-[#3f3f74] p-2 rounded-xl text-white transition cursor-pointer flex items-center gap-1 text-[10px] font-bold uppercase font-mono tracking-wider" 
+                        title="Go to Finances"
+                      >
+                        Ledger <ArrowRight size={12} />
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => { onNavigate('finances'); }}
-                      className="bg-[#2a2a50] hover:bg-[#3f3f74] p-2 rounded-lg text-white transition cursor-pointer" title="Go to Finances"
-                    >
-                      <ArrowRight size={14} />
-                    </button>
+
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                      {fin.map(tx => {
+                        const isInc = tx.type === 'income' || tx.type === 'credit' || tx.type === 'loan_repaid';
+                        return (
+                          <div key={tx.id} className="flex items-center justify-between text-[11px] font-mono bg-[#111120] p-2 rounded-lg border border-[#2a2a50]/40">
+                            <div className="flex items-center gap-1.5 overflow-hidden pr-2">
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isInc ? 'bg-[#00ff88]' : 'bg-rose-500'}`} />
+                              <span className="text-slate-300 truncate font-sans" title={tx.concept}>{tx.concept}</span>
+                            </div>
+                            <span className={`font-bold shrink-0 ${isInc ? 'text-[#00ff88]' : 'text-slate-300'}`}>
+                              {isInc ? '+' : '-'}${tx.amount.toFixed(2)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })()}

@@ -4,7 +4,7 @@ import { fmtShort, fmtDate, todayStr } from '../utils/date';
 import { CATS } from '../utils/storage';
 import { 
   Plus, Trash2, Edit3, Settings, Bell, Calendar, CheckSquare, 
-  Smile, Zap, Award, ThumbsUp, Tag, PlusCircle, Check, MapPin, Image as ImageIcon, ClipboardCopy, FileImage, Search
+  Smile, Zap, Award, ThumbsUp, Tag, PlusCircle, Check, MapPin, Image as ImageIcon, ClipboardCopy, FileImage, Search, Brain, X, Loader, Mic, MicOff, FileText
 } from 'lucide-react';
 
 interface JournalViewProps {
@@ -29,6 +29,12 @@ interface JournalViewProps {
   onAddReminder: (rem: Omit<Reminder, 'id' | 'status'>) => void;
   onToggleReminder: (id: string) => void;
   onNavigate: (viewId: string) => void;
+  onApplyAiLogs?: (actions: any[]) => void;
+  autoStartVoice?: boolean;
+  onClearAutoStartVoice?: () => void;
+  autoStartText?: boolean;
+  onClearAutoStartText?: () => void;
+  onOmniCommand?: (mutations: any) => void;
 }
 
 export const JournalView: React.FC<JournalViewProps> = ({
@@ -42,8 +48,20 @@ export const JournalView: React.FC<JournalViewProps> = ({
   onUpdateJournalTags,
   onAddReminder,
   onToggleReminder,
-  onNavigate
+  onNavigate,
+  onApplyAiLogs,
+  autoStartVoice,
+  onClearAutoStartVoice,
+  autoStartText,
+  onClearAutoStartText,
+  onOmniCommand,
 }) => {
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+  const [aiPercent, setAiPercent] = useState(0);
+  const [aiActionsModal, setAiActionsModal] = useState<{ isOpen: boolean; actions: any[] }>({ isOpen: false, actions: [] });
+  const [omniModal, setOmniModal] = useState<{ isOpen: boolean; data: any | null }>({ isOpen: false, data: null });
+  const [omniInputModal, setOmniInputModal] = useState<{ isOpen: boolean; mode: 'voice' | 'text'; tempText: string }>({ isOpen: false, mode: 'text', tempText: '' });
+
   const today = date;
   const entry: JournalEntry = state.journals[today] || {
     date: today,
@@ -54,12 +72,71 @@ export const JournalView: React.FC<JournalViewProps> = ({
     savedAt: ''
   };
 
+  const handleAiAutoLog = async () => {
+    const completeText = state.journalPrompts
+      .map(p => {
+         const val = entry.sections[p.id]?.trim();
+         return val ? `${p.label}:\n${val}` : "";
+      })
+      .filter(Boolean)
+      .join("\n\n");
+
+    if (!completeText.trim()) {
+      alert("Journal is empty. Write something first.");
+      return;
+    }
+
+    setIsAiAnalyzing(true);
+    setAiPercent(10);
+    const interval = setInterval(() => {
+        setAiPercent(p => Math.min(p + Math.floor(Math.random() * 20), 96));
+    }, 500);
+    
+    try {
+      const response = await fetch('/api/analyze-journal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          text: completeText,
+          localTime: new Date().toISOString()
+        })
+      });
+
+      if (!response.ok) {
+         const errData = await response.json().catch(() => null);
+         throw new Error(errData?.error || 'Failed to analyze journal.');
+      }
+      
+      const data = await response.json();
+      
+      if (!data.actions || data.actions.length === 0) {
+        alert("No clear actions detected to log.");
+        clearInterval(interval);
+        setIsAiAnalyzing(false);
+        return;
+      }
+      
+      clearInterval(interval);
+      setAiPercent(100);
+      setTimeout(() => {
+          setIsAiAnalyzing(false);
+          setAiActionsModal({ isOpen: true, actions: data.actions || [] });
+      }, 400);
+    } catch (e: any) {
+      clearInterval(interval);
+      setIsAiAnalyzing(false);
+      alert("Error reaching AI Analyst: " + e.message);
+    }
+  };
+
   const dailyProgress = dayStats(today);
 
   // Layout editor state
   const [showLayoutEditor, setShowLayoutEditor] = useState(false);
   const [newPromptLabel, setNewPromptLabel] = useState('');
   const [newPromptPlaceholder, setNewPromptPlaceholder] = useState('');
+
+  const isTomorrow = date === (() => { const d = new Date(); d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
 
   // Custom tags state
   const [newTagInput, setNewTagInput] = useState('');
@@ -70,6 +147,236 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [showLocMenu, setShowLocMenu] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+
+  // Voice Recording State
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const [accumulatedTranscript, setAccumulatedTranscript] = useState('');
+  const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  useEffect(() => {
+     if (autoStartVoice) {
+        setOmniInputModal({ isOpen: true, mode: 'voice', tempText: '' });
+        if (!isVoiceRecording) {
+            toggleVoiceRecording();
+        }
+        if (onClearAutoStartVoice) onClearAutoStartVoice();
+     }
+  }, [autoStartVoice]);
+
+  useEffect(() => {
+     if (autoStartText) {
+        setOmniInputModal({ isOpen: true, mode: 'text', tempText: '' });
+        if (onClearAutoStartText) onClearAutoStartText();
+     }
+  }, [autoStartText]);
+
+  const toggleVoiceRecording = async () => {
+    if (isVoiceRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      setIsVoiceRecording(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice recognition is not supported in this browser. Please use Chrome/Edge.");
+      return;
+    }
+
+    // Try to start media recorder for audio persistence
+    try {
+       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+       const mediaRecorder = new MediaRecorder(stream);
+       audioChunksRef.current = [];
+       mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
+       };
+       mediaRecorderRef.current = mediaRecorder;
+       mediaRecorder.start();
+    } catch (e: any) {
+       console.error("Mic access for audio recording denied", e);
+       alert("🎤 Microphone Access Blocked:\n\nPlease make sure to grant microphone permissions in your browser. \n\n💡 Tip: Try clicking 'Open in a new tab' at the top-right of your workspace so the app runs natively outside the preview iframe where permissions are easier to authorize!");
+       return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    
+    let localTranscript = '';
+
+    recognition.onstart = () => {
+       setIsVoiceRecording(true);
+       setAccumulatedTranscript('');
+    };
+
+    recognition.onresult = (event: any) => {
+       let finalTranscript = '';
+       let interimTranscript = '';
+       for (let i = event.resultIndex; i < event.results.length; ++i) {
+         if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript + ' ';
+         } else {
+            interimTranscript += event.results[i][0].transcript;
+         }
+       }
+       
+       if (finalTranscript) {
+          localTranscript += finalTranscript;
+       }
+       setAccumulatedTranscript(localTranscript + interimTranscript);
+    };
+
+    recognition.onend = async () => {
+       setIsVoiceRecording(false);
+       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+           mediaRecorderRef.current.stop();
+       }
+       if (localTranscript.trim()) {
+          await processVoiceCommand(localTranscript.trim());
+       }
+       setAccumulatedTranscript('');
+    };
+
+    recognition.onerror = (event: any) => {
+       if (event.error !== 'aborted') {
+          console.error("Speech recognition error:", event.error);
+       }
+       setIsVoiceRecording(false);
+       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+           mediaRecorderRef.current.stop();
+       }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const saveAudioAsBase64 = async (blob: Blob): Promise<string> => {
+     return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+     });
+  };
+
+  const processVoiceCommand = async (transcript: string) => {
+     setIsProcessingVoice(true);
+     try {
+       let b64Audio = "";
+       // Save audio first
+       if (audioChunksRef.current.length > 0) {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          b64Audio = await saveAudioAsBase64(audioBlob);
+       }
+
+       const localTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+       const logStr = `[${localTimeStr}] ${transcript}`;
+
+       const voicePromptId = "prompt_voice_auto_logs";
+       const hasVoicePrompt = state.journalPrompts.some(p => p.id === voicePromptId);
+       if (!hasVoicePrompt && onUpdateJournalPrompts) {
+          onUpdateJournalPrompts([
+             ...state.journalPrompts,
+             { id: voicePromptId, label: "Voice Auto-Logs", placeholder: "Transcribed audio clips and commands..." }
+          ]);
+       }
+
+       const sections = { ...entry.sections };
+       const prevVal = sections[voicePromptId] || "";
+       sections[voicePromptId] = prevVal ? `${prevVal}\n${logStr}` : logStr;
+
+       onSaveJournal(today, { 
+          audioLog: b64Audio || (entry as any).audioLog, 
+          sections 
+       } as any);
+
+       const res = await fetch('/api/omni-command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+             text: transcript,
+             today: date,
+             stateContext: {
+                 categories: state.categories,
+                 goals: state.financeGoals?.map(g => g.title),
+                 projects: state.projects?.map(p => p.title),
+             }
+          })
+       });
+       
+       if (!res.ok) throw new Error("Failed to map voice");
+       
+       const data = await res.json();
+       
+       if (onOmniCommand) {
+          onOmniCommand(data);
+       }
+       
+     } catch(e) {
+        console.error(e);
+        alert("Omni Engine failed: Check server connection.");
+     } finally {
+        setIsProcessingVoice(false);
+     }
+  };
+
+  const handleAiAutoLogForced = async (overrideSections: any, overridePrompts: any) => {
+    const completeText = overridePrompts
+      .map((p: any) => {
+         const val = overrideSections[p.id]?.trim();
+         return val ? `${p.label}:\n${val}` : "";
+      })
+      .filter(Boolean)
+      .join("\n\n");
+
+    if (!completeText.trim()) return;
+
+    setIsAiAnalyzing(true);
+    setAiPercent(10);
+    const interval = setInterval(() => {
+        setAiPercent(p => Math.min(p + Math.floor(Math.random() * 20), 96));
+    }, 500);
+    
+    try {
+      const response = await fetch('/api/analyze-journal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          text: completeText,
+          localTime: new Date().toISOString()
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to analyze journal.');
+      const data = await response.json();
+      
+      if (!data.actions || data.actions.length === 0) {
+        clearInterval(interval);
+        setIsAiAnalyzing(false);
+        return;
+      }
+      
+      clearInterval(interval);
+      setAiPercent(100);
+      setTimeout(() => {
+          setIsAiAnalyzing(false);
+          setAiActionsModal({ isOpen: true, actions: data.actions || [] });
+      }, 400);
+    } catch (e: any) {
+      clearInterval(interval);
+      setIsAiAnalyzing(false);
+      alert("Error reaching AI Analyst: " + e.message);
+    }
+  };
 
   // Provide initial stroke setup
   useEffect(() => {
@@ -331,6 +638,34 @@ export const JournalView: React.FC<JournalViewProps> = ({
         </div>
       </div>
 
+      <div className="mb-6 w-full animate-fadeIn">
+         <div className="relative p-4 rounded-xl bg-gradient-to-br from-purple-900/40 to-indigo-900/40 border border-purple-500/30 overflow-hidden shadow-[0_0_20px_rgba(168,85,247,0.15)] flex gap-4 items-start">
+             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+             <div className="p-2 bg-purple-500/20 text-purple-400 rounded-lg shrink-0 backdrop-blur-sm shadow-[0_0_15px_rgba(168,85,247,0.4)]">
+                <Mic size={20} className="animate-pulse" />
+             </div>
+             <div>
+                 <h2 className="text-sm font-black uppercase text-[#00d4ff] flex items-center gap-2 font-mono">
+                    <Zap size={14} className="text-purple-400" />
+                    OmniLife Context Engine 
+                 </h2>
+                 <p className="text-xs text-slate-300 mt-1 font-semibold leading-relaxed">
+                   Introducing the <strong className="text-purple-300">Continuous Voice & Auto-Log</strong> interface! Hit the "Voice Auto-Log" option in your sidebar or click the mic button below. We'll listen continuously while you speak informally. The Omni AI will automatically mark tasks as done, log finances, create reminders, adjust settings, and append to your journal dynamically!
+                 </p>
+             </div>
+         </div>
+      </div>
+
+      {(entry as any).audioLog && (
+        <div className="mb-6 w-full p-4 bg-[#111120] border border-[#2a2a50] rounded-xl flex flex-col gap-3">
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#aa44ff] font-mono flex items-center gap-2">
+            <Mic size={12} />
+            Saved Audio Recording
+          </h3>
+          <audio controls src={(entry as any).audioLog} className="w-full h-8" />
+        </div>
+      )}
+
       {/* Main Grid: left writing desk, right metrics/reminders sidebar */}
       {viewState === 'editor' ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -418,6 +753,72 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Action Buttons: Voice Auto-Log, Image, Location, Sketch */}
+          <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 shadow-sm space-y-4 flex flex-col animate-fadeIn relative z-20">
+            <h3 className="text-[10px] font-black tracking-widest text-[#aa44ff] uppercase block font-mono border-b border-[#1e1e38] pb-2">Actions & Assets</h3>
+            <div className="flex flex-wrap gap-2 relative">
+              <button
+                onClick={toggleVoiceRecording}
+                disabled={isProcessingVoice || isAiAnalyzing}
+                className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider cursor-pointer transition disabled:opacity-50 overflow-hidden shadow-sm ${isVoiceRecording ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40 animate-pulse' : 'bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/30 hover:bg-[#ff00a0]/20 hover:shadow-[0_0_15px_rgba(255,0,160,0.2)]'}`}
+                title="Speak to journal and auto-log naturally"
+              >
+                <span className="relative z-10 flex items-center gap-1.5">
+                   {isProcessingVoice ? <Loader size={14} className="animate-spin" /> : isVoiceRecording ? <Mic size={14} className="animate-pulse" /> : <MicOff size={14} />}
+                   {isProcessingVoice ? 'Processing...' : isVoiceRecording ? 'Listening...' : 'Voice & Auto-Log'}
+                </span>
+              </button>
+              <button
+                onClick={handleAiAutoLog}
+                disabled={isAiAnalyzing || isProcessingVoice}
+                className="relative flex items-center gap-2 px-4 py-2 bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/30 rounded-xl text-[11px] font-black uppercase tracking-wider cursor-pointer hover:bg-[#00ff88]/20 transition disabled:opacity-50 overflow-hidden shadow-sm"
+                title="Extract tasks, tracker logs, and finances automatically from journal text"
+              >
+                {isAiAnalyzing && (
+                  <div className="absolute inset-0 bg-[#00ff88]/20 transition-all duration-300" style={{ width: `${aiPercent}%` }} />
+                )}
+                <span className="relative z-10 flex items-center gap-2">
+                   {isAiAnalyzing ? <Loader size={14} className="animate-spin" /> : <Brain size={14} />}
+                   {isAiAnalyzing ? `Analyzing... ${aiPercent}%` : "Auto-Log"}
+                </span>
+              </button>
+              <label className="flex items-center gap-2 px-3 py-2 bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/20 rounded-xl text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#00d4ff]/20 transition">
+                <ImageIcon size={14} />
+                Attach Image
+                <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+              </label>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowLocMenu(!showLocMenu)}
+                  className="flex items-center gap-2 px-3 py-2 bg-[#aa44ff]/10 text-[#aa44ff] border border-[#aa44ff]/20 rounded-xl text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#aa44ff]/20 transition"
+                >
+                  <MapPin size={14} />
+                  Location
+                </button>
+                {showLocMenu && (
+                  <div className="absolute top-full left-0 mt-2 bg-[#111120] border border-[#2a2a50] rounded-xl p-2 flex flex-col gap-1 w-48 z-50 shadow-2xl">
+                    <button onClick={() => { handleCaptureGPS(); setShowLocMenu(false); }} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#00ff88] rounded-lg transition">Current (Locate)</button>
+                    <a href="https://maps.google.com" target="_blank" rel="noreferrer" onClick={() => setShowLocMenu(false)} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#00d4ff] rounded-lg transition block">Google Maps</a>
+                    <a href="https://maps.apple.com" target="_blank" rel="noreferrer" onClick={() => setShowLocMenu(false)} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#ffaa44] rounded-lg transition block">Apple Maps</a>
+                  </div>
+                )}
+              </div>
+              <button 
+                onClick={() => setShowSketch(!showSketch)}
+                className="flex items-center gap-2 px-3 py-2 bg-[#ffaa44]/10 text-[#ffaa44] border border-[#ffaa44]/20 rounded-xl text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#ffaa44]/20 transition"
+              >
+                <Edit3 size={14} />
+                {showSketch ? 'Hide Sketch' : 'Sketch'}
+              </button>
+            </div>
+
+            {(isVoiceRecording || isProcessingVoice || accumulatedTranscript) && (
+               <div className="w-full mt-3 bg-[#ff00a0]/5 border border-[#ff00a0]/20 rounded-xl p-3 max-h-[160px] overflow-auto text-xs font-mono text-[#ff00a0] animate-fadeIn leading-relaxed">
+                  {accumulatedTranscript || (isProcessingVoice ? "Processing voice deeply..." : "Start speaking... (Click Voice & Auto-Log again to finish)")}
+               </div>
+            )}
           </div>
 
           {/* Dynamic Prompts / Custom Headings */}
@@ -513,7 +914,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     </label>
                     <textarea
                       className="w-full min-h-[95px] bg-[#0d0d1a]/80 border border-[#2a2a50] rounded-xl px-3.5 py-2.5 text-xs text-slate-200 placeholder-zinc-600 focus:placeholder-zinc-700 leading-relaxed focus:outline-none focus:border-indigo-550 focus:border-[#ff6b1a] transition-all"
-                      placeholder={p.placeholder}
+                      placeholder={isTomorrow ? p.placeholder.replace(/\btoday\b/gi, match => match === 'Today' ? 'Tomorrow' : 'tomorrow') : p.placeholder}
                       value={textVal}
                       onChange={(e) => handleSectionChange(p.id, e.target.value)}
                     />
@@ -522,40 +923,9 @@ export const JournalView: React.FC<JournalViewProps> = ({
               })}
             </div>
 
-            {/* Media & Coordinates Anchors */}
-            <div className="pt-4 mt-6 border-t border-[#1a1a2e] space-y-4">
-              <h3 className="text-[10px] font-black tracking-widest text-[#00d4ff] uppercase block font-mono">Location & Assets</h3>
-              <div className="flex gap-2">
-                <label className="flex items-center gap-2 px-3 py-1.5 bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/20 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#00d4ff]/20 transition">
-                  <ImageIcon size={12} />
-                  Attach Image
-                  <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                </label>
-                <div className="relative">
-                  <button 
-                    onClick={() => setShowLocMenu(!showLocMenu)}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-[#aa44ff]/10 text-[#aa44ff] border border-[#aa44ff]/20 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#aa44ff]/20 transition"
-                  >
-                    <MapPin size={12} />
-                    Location
-                  </button>
-                  {showLocMenu && (
-                    <div className="absolute top-full lg:bottom-full lg:mb-2 lg:top-auto mt-2 left-0 bg-[#111120] border border-[#2a2a50] rounded-xl p-1.5 flex flex-col gap-1 w-48 z-10 shadow-2xl">
-                      <button onClick={() => { handleCaptureGPS(); setShowLocMenu(false); }} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#00ff88] rounded-lg transition">Current (Locate)</button>
-                      <a href="https://maps.google.com" target="_blank" rel="noreferrer" onClick={() => setShowLocMenu(false)} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#00d4ff] rounded-lg transition block">Google Maps</a>
-                      <a href="https://maps.apple.com" target="_blank" rel="noreferrer" onClick={() => setShowLocMenu(false)} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#ffaa44] rounded-lg transition block">Apple Maps</a>
-                    </div>
-                  )}
-                </div>
-                <button 
-                  onClick={() => setShowSketch(!showSketch)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-[#ffaa44]/10 text-[#ffaa44] border border-[#ffaa44]/20 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#ffaa44]/20 transition"
-                >
-                  <Edit3 size={12} />
-                  {showSketch ? 'Hide Sketch' : 'Sketch'}
-                </button>
-              </div>
 
+            {/* Media & Sketch Canvas */}
+            <div className="pt-4 mt-6 border-t border-[#1a1a2e] space-y-4">
               {/* Sketch UI */}
               {showSketch && (
                 <div className="bg-[#111120] border border-[#2a2a50] p-4 rounded-xl">
@@ -649,7 +1019,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Connections Card Sidebar */}
+      {/* Right Side: Connections Card Sidebar */}
         <div className="space-y-4">
           
           {/* Day Review Snapshot */}
@@ -723,7 +1093,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                   </span>
                 ))
               ) : (
-                <span className="text-[9px] text-slate-600 font-mono tracking-wider italic uppercase">// No tags assigned to this entry</span>
+                <span className="text-[9px] text-slate-600 font-mono tracking-wider italic uppercase">// Contextual tags await processing</span>
               )}
             </div>
 
@@ -887,7 +1257,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 const inPrompt = Object.values(j.sections || {}).some((tx: any) => tx.toLowerCase().includes(sq));
                 return hasTag || inPrompt;
               })
-              .sort((a: any, b: any) => b.date.localeCompare(a.date))
+              .sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""))
               .map((j: any) => {
                 const stats = dayStats(j.date);
                 return (
@@ -936,6 +1306,543 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 <p className="text-slate-500 font-mono uppercase tracking-widest text-xs">No historical journals present.</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* AI AUTO LOG MODAL */}
+      {aiActionsModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-6 w-full max-w-xl shadow-2xl relative my-8">
+            <button 
+              onClick={() => setAiActionsModal({ isOpen: false, actions: [] })}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+            >
+              <X size={16} />
+            </button>
+            <div className="mb-4">
+              <h2 className="text-xl font-black text-white font-display mb-1 flex items-center gap-2">
+                <Brain size={22} className="text-[#00ff88] animate-pulse" />
+                AI COGNITIVE AUTO-LOG
+              </h2>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Review and customize extracted data points before writing them system-wide into the dashboard and calendar databases:
+              </p>
+            </div>
+            
+            <div className="max-h-[420px] overflow-y-auto space-y-3 mb-6 pr-1 scrollbar-none">
+              {aiActionsModal.actions.map((act, i) => {
+                const isReminder = act.module === "reminders";
+                const isFinance = act.module === "finances";
+                const isTracker = act.module === "tracker";
+                const isGoal = act.module === "goals";
+                const isExpedition = act.module === "expeditions";
+
+                return (
+                  <div key={i} className="p-4 bg-[#0d0d1a] border border-[#1e1e38] rounded-xl relative space-y-3">
+                    {/* Delete handler */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = aiActionsModal.actions.filter((_, idx) => idx !== i);
+                        setAiActionsModal({ ...aiActionsModal, actions: updated });
+                      }}
+                      className="absolute top-3 right-3 text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-800/40 transition"
+                      title="Discard extraction"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+
+                    {/* Badge */}
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                        isReminder ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" :
+                        isFinance ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                        isTracker ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" :
+                        isExpedition ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                        "bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/20"
+                      }`}>
+                        // {act.module.toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* Inline Form Grid */}
+                    <div className="grid grid-cols-1 gap-2.5">
+                      {/* Name / Title */}
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Concept / Title</label>
+                        <input
+                          type="text"
+                          value={act.title || act.concept || act.itemTitle || ""}
+                          onChange={(e) => {
+                            const updated = [...aiActionsModal.actions];
+                            if (isReminder) updated[i].title = e.target.value;
+                            else if (isFinance) updated[i].concept = e.target.value;
+                            else if (isTracker) updated[i].itemTitle = e.target.value;
+                            else if (isGoal) updated[i].title = e.target.value;
+                            else if (isExpedition) updated[i].title = e.target.value;
+                            setAiActionsModal({ ...aiActionsModal, actions: updated });
+                          }}
+                          className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                        />
+                      </div>
+
+                      {/* Reminder Module fields */}
+                      {isReminder && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Target Date</label>
+                            <input
+                              type="date"
+                              value={act.date || ""}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].date = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Notify Time</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. 12:00"
+                              value={act.time || ""}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].time = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Location / Place</label>
+                            <input
+                              type="text"
+                              value={act.location || ""}
+                              placeholder="Add address or location key"
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].location = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Notes Description</label>
+                            <textarea
+                              value={act.description || ""}
+                              placeholder="Extra guidelines..."
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].description = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1 text-xs text-white h-12 focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+
+                          {/* Quick Alert option toggle required by user */}
+                          <div className="col-span-2 pt-1 flex items-center justify-between">
+                            <span className="text-[10px] text-slate-400 font-mono">Set Alert Alarm Sound?</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].enableAlert = act.enableAlert !== false ? false : true;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className={`px-3 py-1 text-[10px] font-mono font-bold rounded-lg border uppercase transition flex items-center gap-1.5 ${
+                                act.enableAlert !== false
+                                  ? "bg-[#00ff88]/10 border-[#00ff88]/50 text-[#00ff88]"
+                                  : "bg-slate-800/40 border-slate-700 text-slate-400"
+                              }`}
+                            >
+                              <Bell size={12} className={act.enableAlert !== false ? "animate-bounce" : ""} />
+                              {act.enableAlert !== false ? "🔔 Alarm Active" : "🔕 Alarm Inactive"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Finance Module fields */}
+                      {isFinance && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Amount ($)</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={act.amount || ""}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].amount = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Type</label>
+                            <select
+                              value={act.type || "expense"}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].type = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            >
+                              <option value="expense">Expense</option>
+                              <option value="income">Income</option>
+                            </select>
+                          </div>
+
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Category</label>
+                            <input
+                              type="text"
+                              value={act.category || "General"}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].category = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tracker / Habit fields */}
+                      {isTracker && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Hours Spent</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={act.hours || 0}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].hours = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Reps</label>
+                            <input
+                              type="number"
+                              value={act.reps || 0}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].reps = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Goal fields */}
+                      {isGoal && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Target Objective</label>
+                            <input
+                              type="text"
+                              value={act.target || ""}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].target = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Expedition fields */}
+                      {isExpedition && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Start Date</label>
+                            <input
+                              type="date"
+                              value={act.dateStart || ""}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].dateStart = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">End Date</label>
+                            <input
+                              type="date"
+                              value={act.dateEnd || ""}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].dateEnd = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider">Destination / Location</label>
+                            <input
+                              type="text"
+                              value={act.location || ""}
+                              onChange={(e) => {
+                                const updated = [...aiActionsModal.actions];
+                                updated[i].location = e.target.value;
+                                setAiActionsModal({ ...aiActionsModal, actions: updated });
+                              }}
+                              className="bg-[#070710] border border-[#1e1e38] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-[#00ff88]/40 focus:outline-none font-mono"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {aiActionsModal.actions.length === 0 && (
+                <div className="p-8 text-center text-slate-500 font-mono text-xs border border-dashed border-[#2a2a50] rounded-xl flex flex-col items-center justify-center gap-2">
+                   <span>No actions in review deck.</span>
+                   <button 
+                     onClick={() => setAiActionsModal({ isOpen: false, actions: [] })}
+                     className="px-4 py-1.5 bg-[#2a2a50] text-[10px] text-[#00ff88] rounded-lg hover:bg-[#3d3d75] transition"
+                   >
+                     Close Modal
+                   </button>
+                </div>
+              )}
+            </div>
+
+            {aiActionsModal.actions.length > 0 && (
+              <button
+                onClick={() => {
+                  if (onApplyAiLogs) onApplyAiLogs(aiActionsModal.actions);
+                  setAiActionsModal({ isOpen: false, actions: [] });
+                }}
+                className="w-full py-3 bg-[#00ff88] hover:bg-emerald-400 text-[#0d0d1a] font-extrabold tracking-widest text-xs rounded-xl uppercase transition cursor-pointer select-none"
+              >
+                ✅ INTEGRATE {aiActionsModal.actions.length} ACTIONS SYSTEM-WIDE
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {/* OMNI MODAL */}
+      {omniModal.isOpen && omniModal.data && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#111120] border border-[#ff00a0]/30 rounded-2xl p-6 w-full max-w-xl shadow-[0_0_50px_rgba(255,0,160,0.1)] relative my-8 animate-fadeIn">
+            <button 
+              onClick={() => setOmniModal({ isOpen: false, data: null })}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+            >
+              <X size={16} />
+            </button>
+            <div className="mb-4">
+              <h2 className="text-xl font-black text-white font-display mb-1 flex items-center gap-2">
+                <Zap size={22} className="text-[#ff00a0]" />
+                OMNILIFE LOG DECK
+              </h2>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Review the {omniModal.data.mutations?.length || 0} system actions interpreted from your voice or text log. Edit or discard any inaccuracies before executing.
+              </p>
+            </div>
+            
+            <div className="max-h-[420px] overflow-y-auto space-y-3 mb-6 pr-1 scrollbar-none">
+              {(omniModal.data.mutations || []).map((mut: any, i: number) => {
+                return (
+                  <div key={i} className="p-4 bg-[#0d0d1a] border border-[#1e1e38] rounded-xl relative space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextMuts = [...omniModal.data.mutations];
+                        nextMuts.splice(i, 1);
+                        setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                      }}
+                      className="absolute top-3 right-3 text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-800/40 transition"
+                      title="Discard action"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                    
+                    <div className="flex items-center gap-1.5 mb-2">
+                       <span className="bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/30 text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">
+                         {mut.type.replace(/_/g, ' ')}
+                       </span>
+                    </div>
+
+                    <div className="text-xs text-slate-300 font-mono">
+                      {Object.keys(mut.payload).map(k => {
+                         if (k === 'id') return null;
+                         return (
+                           <div key={k} className="flex flex-col sm:flex-row sm:gap-2 mb-1.5 border-b border-[#1e1e38]/50 pb-1">
+                             <span className="text-slate-500 w-24 shrink-0 uppercase tracking-wider text-[9px] font-bold py-1">{k}</span>
+                             <input
+                               type="text"
+                               value={typeof mut.payload[k] === 'object' ? JSON.stringify(mut.payload[k]) : mut.payload[k] || ''}
+                               onChange={(e) => {
+                                  const nextMuts = [...omniModal.data.mutations];
+                                  nextMuts[i].payload[k] = e.target.value;
+                                  setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                               }}
+                               className="flex-1 bg-transparent border-none focus:outline-none focus:bg-[#111120] text-slate-200 px-1 py-0.5 rounded"
+                             />
+                           </div>
+                         );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+              {(!omniModal.data.mutations || omniModal.data.mutations.length === 0) && (
+                 <div className="p-8 text-center text-slate-500 font-mono text-xs border border-dashed border-[#2a2a50] rounded-xl flex flex-col gap-2 items-center">
+                    No executable actions parsed.
+                    <button onClick={() => setOmniModal({ isOpen: false, data: null })} className="bg-slate-800 px-3 py-1 rounded text-white mt-2">Close Matrix</button>
+                 </div>
+              )}
+            </div>
+
+            {omniModal.data.mutations?.length > 0 && (
+              <button
+                onClick={() => {
+                  if (onOmniCommand) {
+                     onOmniCommand(omniModal.data);
+                  }
+                  setOmniModal({ isOpen: false, data: null });
+                }}
+                className="w-full py-3 bg-[#ff00a0] hover:bg-[#ff00a0]/80 text-[#0d0d1a] font-extrabold tracking-widest text-xs rounded-xl uppercase transition cursor-pointer select-none"
+              >
+                EXECUTE ALL ACTIONS
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {/* OMNI INPUT MODAL (VOICE & TEXT) */}
+      {omniInputModal.isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md overflow-y-auto">
+          <div className="bg-[#111120] border border-[#00d4ff]/30 rounded-3xl p-8 w-full max-w-2xl shadow-[0_0_50px_rgba(0,212,255,0.15)] relative my-8 animate-fadeIn">
+            <button 
+              onClick={() => {
+                if (isVoiceRecording) toggleVoiceRecording();
+                setOmniInputModal({ isOpen: false, mode: 'text', tempText: '' });
+              }}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+            >
+              <X size={20} />
+            </button>
+            
+            <div className="mb-6">
+              <h2 className="text-2xl font-black text-white font-display flex items-center gap-2 uppercase tracking-wide">
+                <Zap size={24} className="text-[#00d4ff]" />
+                OmniLife Context Engine
+              </h2>
+              {omniInputModal.mode === 'voice' ? (
+                 <p className="text-sm text-slate-300 mt-2 font-semibold leading-relaxed border-l-2 border-[#00d4ff] pl-3">
+                   <strong className="text-[#00d4ff]">Continuous Voice & Auto-Log:</strong> Speak naturally about your day, expenses, habits, or reminders. The AI will parse your speech, append to your journal, check off habits, and log finances simultaneously. 
+                 </p>
+              ) : (
+                 <p className="text-sm text-slate-300 mt-2 font-semibold leading-relaxed border-l-2 border-[#00d4ff] pl-3">
+                   <strong className="text-[#00d4ff]">Text Auto-Log:</strong> Type informally about your day, expenses, habits, or reminders. We will dynamically log and configure everything across your operating system.
+                 </p>
+              )}
+            </div>
+            
+            <div className="space-y-6">
+              <div className="relative">
+                <textarea
+                  value={omniInputModal.mode === 'text' ? omniInputModal.tempText : (accumulatedTranscript || '')}
+                  onChange={(e) => setOmniInputModal(prev => ({ ...prev, tempText: e.target.value }))}
+                  readOnly={omniInputModal.mode === 'voice'}
+                  placeholder={omniInputModal.mode === 'voice' ? (isVoiceRecording ? "Listening closely..." : "Click the mic below to start speaking.") : "Type your journal entry, tasks, expenses, or thoughts here..."}
+                  className={`w-full min-h-[200px] bg-[#070710] border rounded-2xl p-5 text-sm text-slate-200 focus:outline-none transition-colors ${omniInputModal.mode === 'voice' && isVoiceRecording ? 'border-[#ff00a0]/60 shadow-[0_0_20px_rgba(255,0,160,0.1)]' : 'border-[#1e1e38] focus:border-[#00d4ff]/50'} font-mono leading-relaxed placeholder-slate-600`}
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                {omniInputModal.mode === 'voice' ? (
+                   <button
+                     onClick={toggleVoiceRecording}
+                     disabled={isProcessingVoice}
+                     className={`flex-1 w-full relative flex justify-center items-center gap-3 px-6 py-4 rounded-xl text-sm font-black uppercase tracking-widest cursor-pointer transition disabled:opacity-50 overflow-hidden shadow-sm ${isVoiceRecording ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40 animate-pulse' : 'bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/30 hover:bg-[#ff00a0]/20 hover:shadow-[0_0_20px_rgba(255,0,160,0.2)]'}`}
+                   >
+                     {isProcessingVoice ? <Loader size={20} className="animate-spin" /> : isVoiceRecording ? <Mic size={20} className="animate-pulse" /> : <MicOff size={20} />}
+                     {isProcessingVoice ? 'Processing...' : isVoiceRecording ? 'Stop & Parse Actions' : 'Start Voice Engine'}
+                   </button>
+                ) : (
+                   <button
+                     onClick={async () => {
+                        const txt = omniInputModal.tempText.trim();
+                        if (!txt) return;
+                        setIsProcessingVoice(true);
+                        try {
+                           const res = await fetch('/api/omni-command', {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({
+                                text: txt,
+                                today: date,
+                                stateContext: {
+                                    categories: state.categories,
+                                    goals: state.financeGoals?.map(g => g.title),
+                                    projects: state.projects?.map(p => p.title),
+                                }
+                             })
+                           });
+                           if (!res.ok) throw new Error("Failed to map text");
+                           const data = await res.json();
+                           if (onOmniCommand) {
+                              onOmniCommand(data);
+                           }
+                           setOmniInputModal({ isOpen: false, mode: 'text', tempText: '' });
+                        } catch (e) {
+                           console.error(e);
+                           alert("Omni Engine failed: Check server connection.");
+                        } finally {
+                           setIsProcessingVoice(false);
+                        }
+                     }}
+                     disabled={isProcessingVoice || !omniInputModal.tempText.trim()}
+                     className="flex-1 w-full bg-[#00d4ff]/10 hover:bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/30 hover:border-[#00d4ff]/60 px-6 py-4 rounded-xl text-sm font-black tracking-widest uppercase transition disabled:opacity-50 flex items-center justify-center gap-3 shadow-[0_0_15px_rgba(0,212,255,0.1)] hover:shadow-[0_0_25px_rgba(0,212,255,0.25)]"
+                   >
+                     {isProcessingVoice ? <Loader size={20} className="animate-spin" /> : <Brain size={20} />}
+                     {isProcessingVoice ? 'Analyzing Context...' : 'Execute Text Auto-Log'}
+                   </button>
+                )}
+                
+                <button 
+                  onClick={() => {
+                     setOmniInputModal(prev => ({ ...prev, mode: prev.mode === 'voice' ? 'text' : 'voice' }));
+                  }}
+                  className="px-6 py-4 bg-[#1e1e38] hover:bg-[#2a2a50] text-slate-300 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition cursor-pointer"
+                >
+                  {omniInputModal.mode === 'voice' ? <FileText size={16} /> : <Mic size={16} />}
+                  Switch to {omniInputModal.mode === 'voice' ? 'Text' : 'Voice'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

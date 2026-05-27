@@ -73,6 +73,16 @@ export const GuidesView: React.FC<Props> = ({ state }) => {
           ))}
         </div>
 
+        <div className="mt-8 p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl max-w-4xl mx-auto shadow-[0_0_20px_rgba(168,85,247,0.15)] ring-1 ring-white/5 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl" />
+          <h2 className="text-sm font-black uppercase tracking-widest text-purple-400 font-mono mb-2 flex items-center gap-2">
+            ⭐ MAJOR HIGHLIGHT: JOURNAL & AUTO-LOG AI
+          </h2>
+          <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+            We highly recommend using the <strong className="text-[#00ff88]">"Journal & Auto-Log"</strong> view. This is your ultimate daily assistant. Simply brain-dump everything you did today into the journal,, and the AI will <strong className="text-purple-300">automatically parse and log</strong> your habits, mark them as DONE, extract your mood/energy, and even log financial transactions straight into your master dashboard seamlessly!
+          </p>
+        </div>
+
         {/* Detailed Function-by-Function Reference Accordion */}
         <div className="mt-12 space-y-6">
           <div className="border-t border-[#1e1e38] pt-8">
@@ -141,19 +151,28 @@ export const GuidesView: React.FC<Props> = ({ state }) => {
 
             {/* Guide #4: Finances */}
             <div className="bg-[#111120] border border-[#2a2a50] rounded-xl p-5 space-y-3">
-              <h3 className="text-xs font-extrabold text-[#ff6b1a] uppercase tracking-widest flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-[#ff6b1a] rounded-full" />
-                4. Finance Ledger Functions
+              <h3 className="text-xs font-extrabold text-[#ffaa00] uppercase tracking-widest flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-[#ffaa00] rounded-full" />
+                4. Finance Ledger & Statement Importer Suite
               </h3>
-              <ul className="text-xs text-slate-400 space-y-2 list-disc list-inside pl-1">
-                <li>
-                  <strong className="text-[#ff6b1a]">Account Register:</strong> Set up checker registries with dedicated balance logs. Income and expenses scale totals automatically when submitted.
+              <ul className="text-xs text-slate-400 space-y-2 list-inside pl-1 space-y-2.5">
+                <li className="list-none flex items-start gap-1.5">
+                  <span className="text-[#ffaa00]">⚡</span>
+                  <div>
+                    <strong className="text-slate-200">Four Logging Methods:</strong> Express log with <em className="text-[#00ff88]">Quick Entry</em>; fill custom metadata with <em className="text-[#00d4ff]">Advanced Log</em>; upload bank statements with <em className="text-[#ffaa00]">File Importer</em>; or use <em className="text-[#ff00a0]">Smart Text Paste</em> to bulk-import freeform text.
+                  </div>
                 </li>
-                <li>
-                  <strong className="text-slate-300">Custom Goals & Task Breaking:</strong> Set complex goals (e.g. "Save $10,000 for house") and create custom checkmark lists directly inside target panels to stay focused.
+                <li className="list-none flex items-start gap-1.5">
+                  <span className="text-[#00d4ff]">✓</span>
+                  <div>
+                    <strong className="text-slate-200">Date & Time Extraction:</strong> Importers parse Excel serial formats, verbal months ("26 May"), and ISO strings to log transactions at their exact historical time rather than import day.
+                  </div>
                 </li>
-                <li>
-                  <strong className="text-slate-300">Integrated Alert System:</strong> Put down a due-date, specify alert frequencies, and build customized popups on your calendar for upcoming bill due cycles.
+                <li className="list-none flex items-start gap-1.5">
+                  <span className="text-[#00ff88]">✎</span>
+                  <div>
+                    <strong className="text-slate-200">Detailed Inline Editing:</strong> Click the pencil icon on any item in the ledger list to launch an overlay modal to edit dates, custom categories, peer splits, and physical locations instantly.
+                  </div>
                 </li>
               </ul>
             </div>
@@ -211,6 +230,28 @@ export const GuidesView: React.FC<Props> = ({ state }) => {
                 </li>
                 <li>
                   <strong className="text-slate-300">Multi-Styling Layout Engines:</strong> Change background states across 15 custom theme modes (like Luxury velvet gold, Redwood canopy forest, cyber synth cyberpunk, space cosmos, etc.).
+                </li>
+              </ul>
+            </div>
+
+            {/* Guide #8: AI Intelligence & Auto-Logging */}
+            <div className="bg-[#111120] border border-[#2a2a50] rounded-xl p-5 space-y-3">
+              <h3 className="text-xs font-extrabold text-[#00ff88] uppercase tracking-widest flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-[#00ff88] rounded-full" />
+                8. AI Intelligence & Over-the-Air Auto-Logging
+              </h3>
+              <ul className="text-xs text-slate-400 space-y-2 list-disc list-inside pl-1">
+                <li>
+                  <strong className="text-[#00ff88]">Over-the-Air AI Processing:</strong> Watch for the AI Loading progress bars to accurately see exactly what the server-side AI is analyzing.
+                </li>
+                <li>
+                  <strong className="text-slate-300">Journal Auto Log:</strong> Let the AI comb through your unstructured personal journal entry using the "Auto-Log AI". It will automatically identify financial transactions, habit completion, goal records, and travel expeditions out of pure text, then suggest actionable buttons for you to inject them back directly into the Omnilife data system.
+                </li>
+                <li>
+                  <strong className="text-slate-300">Advanced Finance Logging:</strong> Drop chaotic financial data into the Smart Text module in Finances, and launch the <em className="text-[#ff00a0]">AI Statement Importer</em>. 
+                </li>
+                <li>
+                  <strong className="text-slate-300">System-Wide AI Analyst:</strong> Fire up the AI Analyst module from any tab or centrally to immediately generate a highly advanced Copilot Prompt with all data matrix attached. Data is deeply interconnected for max inference.
                 </li>
               </ul>
             </div>

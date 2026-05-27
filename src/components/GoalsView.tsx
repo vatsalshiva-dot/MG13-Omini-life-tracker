@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppState, TrackerCategory, GoalCategory, GoalTarget } from '../types';
 import { periodDays, periodRange } from '../utils/date';
-import { CATS } from '../utils/storage';
+import {  CATS , getCatLabel } from '../utils/storage';
 import { Award, Target, HelpCircle, ArrowRight, RotateCcw } from 'lucide-react';
 
 interface GoalsViewProps {
@@ -202,7 +202,7 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
               <div className="bg-[#111120] px-4 py-3 border-b border-[#1e1e38] flex flex-wrap items-center justify-between gap-4">
                 <span className="text-sm font-extrabold uppercase tracking-wide flex items-center gap-1.5" style={{ color: cat.neon }}>
                   <span className="text-base">{cat.icon}</span>
-                  {cat.label}
+                  {getCatLabel(state, cat.id)}
                 </span>
 
                 {/* Overrides form fields */}

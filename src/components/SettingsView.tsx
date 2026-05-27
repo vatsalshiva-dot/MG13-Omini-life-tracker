@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { AppState, TrackerCategory, SyncConfig, RecurringTask } from '../types';
-import { CATS } from '../utils/storage';
+import {  CATS , getCatLabel } from '../utils/storage';
 import { getFileHandle, linkGhostSyncFile, createGhostSyncFile } from '../utils/ghost';
 import { 
-  Check, Settings, Globe, Plus, Trash2, Calendar, FileText, Database, X, Cloud, Key, Link, Shield
+  Check, Settings, Globe, Plus, Trash2, Calendar, FileText, Database, X, Cloud, Key, Link, Shield, Pencil
 } from 'lucide-react';
 
 interface SettingsViewProps {
   state: AppState;
-  onUpdateProfile: (name: string, tagline: string, email: string) => void;
+  onUpdateProfile: (name: string, tagline: string, email: string, dailyBudgetLimit: number, dailyIncomeTarget: number) => void;
   onAddItem: (cat: TrackerCategory, item: string) => void;
   onRemoveItem: (cat: TrackerCategory, item: string) => void;
   onUpdateTargetFields: (cat: TrackerCategory, item: string, field: 'reps' | 'hours', val: number) => void;
+  onUpdateCategoryLabel: (cat: TrackerCategory, label: string) => void;
+  onRenameItem?: (cat: TrackerCategory, oldItem: string, newItem: string) => void;
   
   // Recurring tasks list and triggers
   onOpenRecurringModal: (cat: TrackerCategory, item: string) => void;
@@ -40,6 +42,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onAddItem,
   onRemoveItem,
   onUpdateTargetFields,
+  onUpdateCategoryLabel,
+  onRenameItem,
   onOpenRecurringModal,
   getRecurring,
   syncCfg,
@@ -59,9 +63,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [profileName, setProfileName] = useState(state.profile.name || '');
   const [profileTagline, setProfileTagline] = useState(state.profile.tagline || '');
   const [profileEmail, setProfileEmail] = useState(state.profile.email || '');
+  const [dailyBudgetLimit, setDailyBudgetLimit] = useState(
+    state.profile.dailyBudgetLimit !== undefined ? String(state.profile.dailyBudgetLimit) : ''
+  );
+  const [dailyIncomeTarget, setDailyIncomeTarget] = useState(
+    state.profile.dailyIncomeTarget !== undefined ? String(state.profile.dailyIncomeTarget) : ''
+  );
 
   // Add items state
   const [addInputs, setAddInputs] = useState<Record<string, string>>({});
+  
+  // Custom checklist editing state
+  const [editingItem, setEditingItem] = useState<{ catId: TrackerCategory; oldName: string } | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+
+  const handleSaveEdit = () => {
+    if (!editingItem) return;
+    const { catId, oldName } = editingItem;
+    const cleanNewName = editingValue.trim();
+    if (cleanNewName && cleanNewName !== oldName) {
+      if (onRenameItem) {
+        onRenameItem(catId, oldName, cleanNewName);
+      }
+    }
+    setEditingItem(null);
+  };
   
   const [ghostLinked, setGhostLinked] = useState(false);
   useEffect(() => {
@@ -69,12 +95,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   }, []);
 
   const handleLinkGhost = async () => {
+    if (!('showOpenFilePicker' in window)) {
+      alert("Ghost Sync is only supported on Desktop Chrome/Edge. On mobile PWA or Safari, please use Cloud Sync below.");
+      return;
+    }
     const ok = await linkGhostSyncFile();
     setGhostLinked(ok);
     if (ok) alert('Ghost Sync File Linked. Data will auto-save transparently on next edits.');
   };
   
   const handleCreateGhost = async () => {
+    if (!('showSaveFilePicker' in window)) {
+      alert("Ghost Sync is only supported on Desktop Chrome/Edge. On mobile PWA or Safari, please use Cloud Sync below.");
+      return;
+    }
     const ok = await createGhostSyncFile();
     setGhostLinked(ok);
     if (ok) alert('New Ghost Sync File Created. Data will auto-save transparently on next edits.');
@@ -82,8 +116,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateProfile(profileName.trim(), profileTagline.trim(), profileEmail.trim());
-    alert('User Profile updated successfully!');
+    onUpdateProfile(
+      profileName.trim(),
+      profileTagline.trim(),
+      profileEmail.trim(),
+      parseFloat(dailyBudgetLimit) || 0,
+      parseFloat(dailyIncomeTarget) || 0
+    );
+    alert('User Profile and Master Daily Budgets updated successfully!');
   };
 
   const handleAddItemSubmit = (catId: TrackerCategory, e: React.FormEvent) => {
@@ -104,6 +144,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     };
     r.readAsText(file);
     e.target.value = ''; // Reset
+  };
+
+  const handleRequestNotifications = async () => {
+    if (!("Notification" in window)) {
+      alert("This browser does not support desktop notification");
+      return;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm === "granted") {
+      alert("Notifications enabled! You will now receive background alerts for timers and reminders.");
+    } else {
+      alert("Notification permission denied or dismissed.");
+    }
   };
 
   const catColors: Record<string, string> = {
@@ -232,6 +285,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-3 border-t border-[#111120] pt-3 mt-3">
+              <div className="space-y-1">
+                <label className="text-[9px] text-[#ff6b1a] uppercase tracking-widest block font-black">Daily Budget (Spent Limit)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1.5 text-slate-500 font-mono text-xs">$</span>
+                  <input 
+                    type="number"
+                    step="any"
+                    className="w-full bg-[#111120] border border-[#ff6b1a]/30 rounded-lg pl-6 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-[#ff6b1a] font-mono"
+                    value={dailyBudgetLimit}
+                    onChange={(e) => setDailyBudgetLimit(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] text-[#00ff88] uppercase tracking-widest block font-black">Daily Income Target</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1.5 text-slate-500 font-mono text-xs">$</span>
+                  <input 
+                    type="number"
+                    step="any"
+                    className="w-full bg-[#111120] border border-[#00ff88]/30 rounded-lg pl-6 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-[#00ff88] font-mono"
+                    value={dailyIncomeTarget}
+                    onChange={(e) => setDailyIncomeTarget(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+            </div>
+
             <button
               type="submit"
               className="px-4 py-1.5 bg-[#ff6b1a] text-black font-extrabold text-[10px] uppercase tracking-widest rounded-lg hover:bg-[#ff9040]"
@@ -279,6 +364,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   onChange={handleFileUpload} 
                 />
               </label>
+
+              <button 
+                onClick={handleRequestNotifications}
+                className="px-4 py-1.5 border border-purple-500/40 text-purple-400 hover:bg-purple-500/10 rounded-lg text-xs font-bold whitespace-nowrap"
+              >
+                ENABLE NATIVE ALERTS
+              </button>
 
               <button 
                 onClick={onResetAll}
@@ -330,6 +422,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {syncCfg.provider === 'gist' && (
           <div className="p-4 bg-[#111120] border border-[#1e1e38] rounded-xl space-y-3 font-semibold">
             <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">// github gist credentials sync</p>
+            
+            <ol className="text-[11px] text-slate-300 font-normal leading-relaxed space-y-2 mb-3 list-decimal pl-5 max-w-2xl bg-black/30 p-4 rounded-lg border border-slate-800">
+              <li><strong>Step 1:</strong> Go to <a href="https://github.com/settings/tokens/new" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">GitHub Personal Access Tokens</a> (you will need a GitHub account).</li>
+              <li><strong>Step 2:</strong> Mention a Note "OmniLife Cloud Sync" and set Expiration to <strong>No expiration</strong>.</li>
+              <li><strong>Step 3:</strong> Scroll down to "Select scopes" and check ONLY the <strong className="text-[#00ff88]">gist</strong> checkbox.</li>
+              <li><strong>Step 4:</strong> Scroll to the bottom, click "Generate token".</li>
+              <li><strong>Step 5:</strong> Copy the resulting string (<span className="font-mono text-[#00d4ff]">ghp_...</span>) and paste it into the field below:</li>
+            </ol>
+            
             <input 
               type="password"
               className="w-full bg-slate-950 border border-[#2a2a50] rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none"
@@ -337,6 +438,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               value={syncCfg.gistToken}
               onChange={(e) => onUpdateSyncFields({ gistToken: e.target.value })}
             />
+            
+            <div className="text-[11px] text-slate-300 font-normal leading-relaxed space-y-1.5 mt-2 mb-2 max-w-2xl bg-black/30 p-3 rounded-lg border border-slate-800">
+              <span className="text-[#a0a0b0]">Leave the "Gist ID" blank if this is your first time. <strong>Click "SYNC TO CLOUD NOW" below</strong>, and the app will generate a brand new Gist file on your GitHub and fill in the ID for you automatically!</span>
+              <br/><br/>
+              <span className="text-[#a0a0b0]">If you already have a backup on another device, paste the specific Gist ID here and click "PULL FROM CLOUD".</span>
+            </div>
+
             <input 
               type="text"
               className="w-full bg-slate-950 border border-[#2a2a50] rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-750 focus:outline-none"
@@ -350,6 +458,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {syncCfg.provider === 'jsonbin' && (
           <div className="p-4 bg-[#111120] border border-[#1e1e38] rounded-xl space-y-3 font-semibold">
             <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">// jsonbin.io credential sync</p>
+            
+            <ol className="text-[11px] text-slate-300 font-normal leading-relaxed space-y-2 mb-3 list-decimal pl-5 max-w-2xl bg-black/30 p-4 rounded-lg border border-slate-800">
+              <li><strong>Step 1:</strong> Create a free account at <a href="https://jsonbin.io/" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">JSONBin.io</a>.</li>
+              <li><strong>Step 2:</strong> In JSONBin Dashboard, go to <strong>API Keys</strong> (often under Developer panel).</li>
+              <li><strong>Step 3:</strong> Click "Create New Key" to generate your key.</li>
+              <li><strong>Step 4:</strong> Copy the Master Key starting with (<span className="font-mono text-[#00d4ff]">$2b$10$...</span>) and paste it into the field below:</li>
+            </ol>
+
             <input 
               type="password"
               className="w-full bg-slate-950 border border-[#2a2a50] rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none"
@@ -357,10 +473,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               value={syncCfg.jbKey}
               onChange={(e) => onUpdateSyncFields({ jbKey: e.target.value })}
             />
+            
+            <div className="text-[11px] text-slate-300 font-normal leading-relaxed space-y-1.5 mt-2 mb-2 max-w-2xl bg-black/30 p-3 rounded-lg border border-slate-800">
+              <span className="text-[#a0a0b0]">Leave "Bin ID" blank for your first sync. The app will create a new cloud bin. To load this data on another device, paste the resulting Bin ID here and click "PULL FROM CLOUD".</span>
+            </div>
+
             <input 
               type="text"
               className="w-full bg-slate-950 border border-[#2a2a50] rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-750 focus:outline-none"
-              placeholder="Bin ID (leave blank to let app compile bin dynamically has startup)"
+              placeholder="Bin ID (leave blank to let app compile bin dynamically at startup)"
               value={syncCfg.jbId}
               onChange={(e) => onUpdateSyncFields({ jbId: e.target.value })}
             />
@@ -410,29 +531,110 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           return (
             <div key={cat.id} className="bg-[#0d0d1a] border border-[#1e1e38] rounded-xl p-4 space-y-4">
-              <h4 className="text-xs font-bold uppercase tracking-wide flex items-center gap-1 border-b border-[#111120] pb-2" style={{ color: cat.neon }}>
-                {cat.icon} Manage {cat.label}
-              </h4>
+              <div className="flex items-center gap-2 border-b border-[#111120] pb-2">
+                <span style={{ color: cat.neon }}>{cat.icon}</span>
+                <input
+                  type="text"
+                  value={state.categoryLabels?.[cat.id] !== undefined ? state.categoryLabels[cat.id] : getCatLabel(state, cat.id)}
+                  onChange={(e) => onUpdateCategoryLabel(cat.id, e.target.value)}
+                  placeholder={`Label for ${cat.id}`}
+                  className="bg-transparent border-none focus:outline-none uppercase text-xs font-bold w-full"
+                  style={{ color: cat.neon }}
+                />
+              </div>
 
               {/* Tag checklist pool */}
-              <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto pr-1">
+              <div className="flex flex-wrap gap-1.5 max-h-[160px] overflow-y-auto pr-1">
                 {items.length > 0 ? (
-                  items.map(item => (
-                    <div 
-                      key={item}
-                      className="flex items-center text-xs font-bold border rounded-lg px-2 py-0.5"
-                      style={{ borderColor: `${cat.neon}22`, color: cat.neon, backgroundColor: `${cat.neon}05` }}
-                    >
-                      <span className="truncate pr-1 font-medium text-slate-300">{item}</span>
-                      <button 
-                        onClick={() => onRemoveItem(cat.id, item)}
-                        className="text-slate-500 hover:text-rose-500 pl-1 border-l border-[#1e1e38] ml-1 transition"
-                        title="Remove tracker item"
+                  items.map(item => {
+                    const isEditingThis = editingItem?.catId === cat.id && editingItem?.oldName === item;
+                    
+                    if (isEditingThis) {
+                      return (
+                        <div 
+                          key={item}
+                          className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs font-bold border rounded-xl p-2.5 w-full justify-between shadow-lg"
+                          style={{ borderColor: `#ff6b1a`, color: `#ff6b1a`, backgroundColor: `rgba(255, 107, 26, 0.05)` }}
+                        >
+                          <div className="flex flex-col gap-1 flex-1">
+                            <span className="text-[8px] tracking-widest font-black uppercase px-2 py-0.5 rounded bg-[#ff6b1a]/20 shrink-0 text-white w-max animate-pulse">
+                              📝 REWRITE & RECORD TO NEW SEPARATE TASK
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <input 
+                                autoFocus
+                                className="bg-[#090913] border-b border-[#ff6b1a]/55 text-xs text-slate-200 focus:outline-none flex-1 font-bold py-1 px-1.5 rounded"
+                                value={editingValue}
+                                onChange={(e) => setEditingValue(e.target.value)}
+                                onKeyDown={(e) => { 
+                                  if (e.key === 'Enter') {
+                                    handleSaveEdit();
+                                  } else if (e.key === 'Escape') {
+                                    setEditingItem(null);
+                                  }
+                                }}
+                              />
+                            </div>
+                            <span className="text-[8px] text-slate-500 font-bold lowercase italic leading-none pt-0.5">
+                              *Creates a separate task with new targets; past histories stay linked to old title intact!
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto mt-2 sm:mt-0">
+                            <button 
+                              type="button"
+                              onClick={handleSaveEdit}
+                              className="bg-emerald-500/25 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/40 text-[9.5px] font-black px-2.5 py-1 rounded-md transition uppercase tracking-wider"
+                              title="Save custom separate task"
+                            >
+                              ✓ Save Separate Task
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => setEditingItem(null)}
+                              className="bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-[9.5px] font-bold px-2 py-1 rounded-md transition uppercase tracking-wider"
+                              title="Cancel"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div 
+                        key={item}
+                        className="flex items-center gap-2.5 text-xs font-bold border rounded-lg pl-2 px-1 py-1.5 transition-colors duration-200 hover:bg-slate-900/10 group"
+                        style={{ borderColor: `${cat.neon}22`, color: cat.neon, backgroundColor: `${cat.neon}05` }}
                       >
-                        ✕
-                      </button>
-                    </div>
-                  ))
+                        <span className="text-slate-300 font-bold whitespace-normal break-words text-xs leading-none">{item}</span>
+                        
+                        <div className="flex items-center gap-1 pl-2 border-l border-[#1e1e38]">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setEditingItem({ catId: cat.id, oldName: item });
+                              setEditingValue(item);
+                            }}
+                            className="text-slate-500 hover:text-[#00d4ff] text-[9px] font-black p-0.5 transition flex items-center gap-1 uppercase tracking-widest"
+                            title="Edit task name (records as a separate task to preserve old history files)"
+                          >
+                            <Pencil size={11} className="shrink-0" />
+                            <span className="text-[8px] hidden group-hover:inline-block font-extrabold text-[#00d4ff]">EDIT</span>
+                          </button>
+                          
+                          <button 
+                            type="button"
+                            onClick={() => onRemoveItem(cat.id, item)}
+                            className="text-slate-500 hover:text-rose-500 pl-1 border-l border-[#1e1e38]/40 ml-1 p-0.5 transition-colors"
+                            title="Remove tracker item"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
                 ) : (
                   <p className="text-[10px] text-slate-600 tracking-wider font-mono italic uppercase">// checklist is empty</p>
                 )}
@@ -479,7 +681,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             return (
               <div key={cat.id} className="space-y-2">
                 <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: cat.neon }}>
-                  {cat.icon} {cat.label} Estimates
+                  {cat.icon} {getCatLabel(state, cat.id)} Estimates
                 </span>
 
                 <div className="space-y-2">
@@ -542,7 +744,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             return (
               <div key={cat.id} className="space-y-2">
                 <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: cat.neon }}>
-                  {cat.icon} {cat.label} Recurrences
+                  {cat.icon} {getCatLabel(state, cat.id)} Recurrences
                 </span>
 
                 <div className="space-y-1 bg-[#111120]/50 border border-[#1e1e38] rounded-xl p-2.5">

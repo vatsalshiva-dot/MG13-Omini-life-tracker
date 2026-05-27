@@ -1,5 +1,5 @@
 import React from "react";
-import { AppState, SyncConfig } from "../types";
+import { AppState, SyncConfig, JournalEntry } from "../types";
 import { CATS } from "../utils/storage";
 import {
   Home,
@@ -28,6 +28,12 @@ import {
   Coffee,
   Music,
   Volume2,
+  Cpu,
+  Zap,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Check
 } from "lucide-react";
 
 interface SidebarProps {
@@ -40,6 +46,14 @@ interface SidebarProps {
   onExportCSV: () => void;
   hasSystemAlerts?: boolean;
   onLoadDemo?: () => void;
+  onStartMorning?: () => void;
+  onStartEvening?: () => void;
+  onPlanTomorrow?: () => void;
+  onStartAutoLog?: () => void;
+  onToggleGlobalVoice?: () => void;
+  onInstallApp?: () => void;
+  activeDate?: string;
+  onSaveJournal?: (date: string, updated: any) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -52,6 +66,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onExportCSV,
   hasSystemAlerts = false,
   onLoadDemo = () => {},
+  onStartMorning,
+  onStartEvening,
+  onPlanTomorrow,
+  onStartAutoLog,
+  onToggleGlobalVoice,
+  onInstallApp,
+  activeDate,
+  onSaveJournal,
 }) => {
   const profile = state.profile || { name: "", tagline: "" };
 
@@ -90,15 +112,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
       section: "OVERVIEW",
     },
     {
+      id: "journal",
+      label: "Journal & Reflections",
+      icon: <BookOpen size={14} />,
+      section: "DAILY LOG",
+    },
+    {
       id: "daily",
       label: "Daily Tracker",
       icon: <Clipboard size={14} />,
       section: "DAILY LOG",
     },
     {
-      id: "journal",
-      label: "Daily Journal",
-      icon: <Book size={14} />,
+      id: "expeditions",
+      label: "Expeditions",
+      icon: <Search size={14} />,
+      section: "DAILY LOG",
+    },
+    {
+      id: "finances",
+      label: "Finances",
+      icon: <Target size={14} />,
+      section: "DAILY LOG",
+    },
+    {
+      id: "focus_audio",
+      label: "Focus Audio",
+      icon: <Headphones size={14} />,
+      section: "DAILY LOG",
+    },
+    {
+      id: "sketchpad",
+      label: "Sketchpad",
+      icon: <Share2 size={14} />,
       section: "DAILY LOG",
     },
     {
@@ -120,33 +166,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       section: "GOALS & ANALYSIS",
     },
     {
+      id: "telemetry",
+      label: "System Telemetry",
+      icon: <Cpu size={14} />,
+      section: "MANAGE",
+    },
+    {
       id: "ai_analyst",
       label: "AI Analyst Hub",
       icon: <Bot size={14} />,
-      section: "EXTENSIONS",
-    },
-    {
-      id: "focus_audio",
-      label: "Focus Audio",
-      icon: <Headphones size={14} />,
-      section: "EXTENSIONS",
-    },
-    {
-      id: "expeditions",
-      label: "Expeditions",
-      icon: <Search size={14} />,
-      section: "EXTENSIONS",
-    },
-    {
-      id: "finances",
-      label: "Finances",
-      icon: <Target size={14} />,
-      section: "EXTENSIONS",
-    },
-    {
-      id: "sketchpad",
-      label: "Sketchpad",
-      icon: <Share2 size={14} />,
       section: "EXTENSIONS",
     },
     {
@@ -251,6 +279,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
+      {/* Bookend Wizards Actions */}
+      <div className="px-3 py-4 space-y-2 border-b border-[#111120]">
+         {onInstallApp && (
+             <button onClick={onInstallApp} className="w-full flex items-center justify-center gap-2 bg-[#00d4ff]/10 hover:bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/30 hover:border-[#00d4ff]/60 transition-colors uppercase tracking-widest text-[9px] font-black py-2.5 rounded-lg cursor-pointer mb-4 shadow-[0_0_10px_rgba(0,212,255,0.1)] hover:shadow-[0_0_20px_rgba(0,212,255,0.2)]">
+                 <Download size={14} /> Install App (PWA)
+             </button>
+         )}
+         {onStartMorning && (
+             <button onClick={onStartMorning} className="w-full flex items-center justify-center gap-2 bg-[#111120] hover:bg-[#00ff88]/10 text-slate-300 hover:text-[#00ff88] border border-[#2a2a50] hover:border-[#00ff88]/40 transition-colors uppercase tracking-widest text-[9px] font-black py-2.5 rounded-lg cursor-pointer">
+                 ☕ Start the Day
+             </button>
+         )}
+         {onStartEvening && (
+             <button onClick={onStartEvening} className="w-full flex items-center justify-center gap-2 bg-[#111120] hover:bg-indigo-500/10 text-slate-300 hover:text-indigo-400 border border-[#2a2a50] hover:border-indigo-500/40 transition-colors uppercase tracking-widest text-[9px] font-black py-2.5 rounded-lg cursor-pointer">
+                 🌙 End Your Day
+             </button>
+         )}
+         {onPlanTomorrow && (
+             <button onClick={onPlanTomorrow} className="w-full flex items-center justify-center gap-2 bg-[#111120] hover:bg-amber-500/10 text-slate-300 hover:text-amber-400 border border-[#2a2a50] hover:border-amber-500/40 transition-colors uppercase tracking-widest text-[9px] font-black py-2.5 rounded-lg cursor-pointer">
+                 🎯 Plan Tomorrow
+             </button>
+         )}
+
+         {onToggleGlobalVoice && (
+             <button onClick={onToggleGlobalVoice} className="w-full flex items-center justify-center gap-2 bg-[#ff00a0]/10 hover:bg-[#ff00a0]/20 text-[#ff00a0] border border-[#ff00a0]/30 hover:border-[#ff00a0]/60 transition-colors uppercase tracking-widest text-[9px] font-black py-2.5 rounded-lg cursor-pointer mt-2 shadow-[0_0_15px_rgba(255,0,160,0.15)] hover:shadow-[0_0_20px_rgba(255,0,160,0.3)]">
+                 🎤 Voice Auto-Log
+             </button>
+         )}
+      </div>
+
+
+
       {/* Sidebar Links Sections */}
       <div className="flex-1 p-2 space-y-4">
         {Object.entries(groupSections).map(([groupTitle, list]) => (
@@ -324,24 +384,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   : "SYNC ACTIVE"}
           </span>
         </div>
-      </div>
-
-      {/* Bottom export drawers */}
-      <div className="border-t border-[#111120] p-2 space-y-1 text-center bg-[#0d0d1a] shrink-0 font-bold uppercase tracking-widest">
-        <button
-          onClick={onExportJSON}
-          className="w-full flex items-center justify-center gap-1.5 py-1 text-[9px] text-slate-300 bg-[#111120] border border-[#2a2a50] hover:border-slate-700 rounded transition cursor-pointer"
-        >
-          <Download size={10} />
-          JSON DATABASE
-        </button>
-        <button
-          onClick={onExportCSV}
-          className="w-full flex items-center justify-center gap-1.5 py-1 text-[9px] text-white bg-[#ff6b1a] hover:bg-[#ff6b1a] border border-transparent rounded transition cursor-pointer"
-        >
-          <Download size={10} />
-          CSV SHEET
-        </button>
       </div>
     </nav>
   );

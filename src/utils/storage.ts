@@ -11,6 +11,11 @@ export const CATS: { id: TrackerCategory; label: string; icon: string; neon: str
   { id: 'custom', label: 'Custom', icon: '◎', neon: '#aa44ff' },
 ];
 
+export function getCatLabel(state: AppState | undefined | null, catId: TrackerCategory): string {
+  if (state?.categoryLabels?.[catId]) return state.categoryLabels[catId] as string;
+  return CATS.find(c => c.id === catId)?.label || catId;
+}
+
 export function initCG() {
   const o: any = {};
   CATS.forEach((c) => {
@@ -46,7 +51,7 @@ export function defData(): AppState {
       { id: 'wins', label: '🏆 WINS & HIGHLIGHTS', placeholder: 'What went well today? What are you proud of?' },
       { id: 'blockers', label: '🧱 BLOCKERS & CHALLENGES', placeholder: 'What got in the way? What was difficult?' },
       { id: 'notes', label: '📝 FREE NOTES', placeholder: 'Anything else on your mind...' },
-      { id: 'tomorrow', label: '🎯 TOMORROW\'S TOP 3 FOCUS', placeholder: '1.\n2.\n3.' },
+      { id: 'tomorrow', label: '🎯 TODAY\'S TOP 3 FOCUS', placeholder: '1.\n2.\n3.' },
     ],
     journalTags: ['Productive', 'Grateful', 'Creative', 'Relaxed', 'Tired', 'Stressed', 'Healthy', 'Social', 'Focused', 'Exhausted'],
     expeditions: [],

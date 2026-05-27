@@ -557,7 +557,7 @@ export const ExpeditionsView: React.FC<{
             if (!list.length) {
               return (
                 <div className="md:col-span-2 bg-[#0d0d1a] border border-dashed border-[#1e1e38] p-4 text-center text-[10px] text-slate-600 uppercase font-mono tracking-wider rounded-xl">
-                  // No active alarming alerts or reminders configured for expeditions.
+                  // Pending logistic alignments. Add alerts to map.
                 </div>
               );
             }

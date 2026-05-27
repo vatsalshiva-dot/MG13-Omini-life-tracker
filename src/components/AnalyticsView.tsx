@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppState, TrackerCategory } from '../types';
 import { getWeek } from '../utils/date';
-import { CATS } from '../utils/storage';
+import {  CATS , getCatLabel } from '../utils/storage';
 import { TrendingUp, BarChart, Percent, Clock, AlertCircle } from 'lucide-react';
 
 interface AnalyticsViewProps {
@@ -243,7 +243,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               return (
                 <div key={cat.id} className="space-y-1">
                   <div className="flex text-xs font-bold uppercase justify-between text-slate-400">
-                    <span style={{ color: cat.neon }}>{cat.icon} {cat.label}</span>
+                    <span style={{ color: cat.neon }}>{cat.icon} {getCatLabel(state, cat.id)}</span>
                     <span>
                       {cStat.done}/{cStat.total} done ({pct}%)
                     </span>
@@ -324,7 +324,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   <div key={cat.id} className="text-xs">
                     <div className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.neon }} />
-                      <span className="text-slate-400 font-bold">{cat.label}</span>
+                      <span className="text-slate-400 font-bold">{getCatLabel(state, cat.id)}</span>
                     </div>
                     <div className="pl-3.5 text-[10px] font-mono text-slate-500 mt-0.5">
                       {count} items ({percentDone}%)

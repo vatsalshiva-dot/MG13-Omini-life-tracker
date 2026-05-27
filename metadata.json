@@ -2,7 +2,8 @@
   "name": "Life Tracker",
   "description": "Integrated life tracker featuring a fully customizable daily journal, connected reminders/calendar, and a precision Pomodoro clock that tracks even failed sessions.",
   "requestFramePermissions": [
-    "geolocation"
+    "geolocation",
+    "microphone"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

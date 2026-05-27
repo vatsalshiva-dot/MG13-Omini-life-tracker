@@ -1,7 +1,7 @@
 import React from "react";
 import { AppState, TrackerCategory } from "../types";
 import { fmtDate, fmtShort, getWeek } from "../utils/date";
-import { CATS } from "../utils/storage";
+import {  CATS , getCatLabel } from "../utils/storage";
 import { DashboardWeather } from "./DashboardWeather";
 import {
   Play,
@@ -25,6 +25,11 @@ interface DashboardViewProps {
   onSetFontFamily: (fontId: string) => void;
   getDayD: (ds: string, cat: TrackerCategory, item: string) => any;
   onOpenAIAnalyst?: (prompt?: string) => void;
+  onStartMorning?: () => void;
+  onStartEvening?: () => void;
+  onPlanTomorrow?: () => void;
+  onToggleReminder?: (id: string) => void;
+  onCycleStatus?: (cat: string, item: string) => void;
   dayStats: (ds: string) => {
     done: number;
     missed: number;
@@ -49,6 +54,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   getDayD,
   dayStats,
   onOpenAIAnalyst,
+  onStartMorning,
+  onStartEvening,
+  onPlanTomorrow,
+  onToggleReminder,
+  onCycleStatus,
 }) => {
   const today = activeDate; // Using current state date as viewport focal point
   const stats = dayStats(today);
@@ -57,6 +67,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [showAllColors, setShowAllColors] = React.useState(false);
   const [showAllThemes, setShowAllThemes] = React.useState(false);
   const [isCustomizerOpen, setIsCustomizerOpen] = React.useState(false);
+
+  const [showStartPrompt, setShowStartPrompt] = React.useState(() => {
+    return typeof window !== "undefined" && !localStorage.getItem("omnilife_start_prompt_seen_" + activeDate);
+  });
+
+  React.useEffect(() => {
+    // Only show if nothing is logged for today and it's morning
+    const hasData = Object.keys(state.daily[activeDate] || {}).length > 0;
+    if (hasData) {
+       setShowStartPrompt(false);
+    } else if (showStartPrompt) {
+       localStorage.setItem("omnilife_start_prompt_seen_" + activeDate, "true");
+    }
+  }, [state.daily, activeDate, showStartPrompt]);
 
   const [bannerClosed, setBannerClosed] = React.useState(() => {
     return typeof window !== "undefined" && localStorage.getItem("omnilife_banner_closed") === "true";
@@ -80,7 +104,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Find upcoming reminders
   const upcomingReminders = state.reminders
     .filter((r) => r.status !== "done")
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""))
     .slice(0, 5);
 
   // Best streak
@@ -148,7 +172,7 @@ Total Hours Logged: ${stats.hrs.toFixed(1)}h
 Overall Satisfaction: ${stats.sat ? stats.sat.toFixed(1) : "-"}/5
 
 Categories:
-${CATS.map((c) => `- ${c.label}: ${state.items[c.id]?.length || 0} items monitored`).join("\n")}
+${CATS.map((c) => `- ${getCatLabel(state, c.id)}: ${state.items[c.id]?.length || 0} items monitored`).join("\n")}
 
 Upcoming Reminders:
 ${upcomingReminders.map((r) => `- ${r.title} [Priority: ${r.priority}] on ${r.dueDate} ${r.time || ""}`).join("\n")}
@@ -174,6 +198,30 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
 
   return (
     <div className="space-y-6">
+        {showStartPrompt && onStartMorning && (
+            <div className="fixed inset-0 z-[200] bg-[#0d0d1a]/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-[#111120] border border-[#00ff88]/40 shadow-[0_0_40px_rgba(0,255,136,0.1)] rounded-2xl p-8 max-w-sm w-full text-center animate-fade-in relative">
+                    <button onClick={() => setShowStartPrompt(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
+                    <div className="w-16 h-16 bg-[#00ff88]/10 text-[#00ff88] rounded-full flex items-center justify-center mx-auto mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/></svg>
+                    </div>
+                    <h3 className="text-2xl font-black text-white mb-2 uppercase tracking-tight">A New Day</h3>
+                    <p className="text-slate-400 mb-8 text-sm">You haven't planned your day yet. Ready to start?</p>
+                    <button 
+                         onClick={() => {
+                             setShowStartPrompt(false);
+                             onStartMorning();
+                         }}
+                         className="w-full bg-[#00ff88] text-[#0d0d1a] font-black uppercase tracking-widest py-4 rounded-xl hover:bg-[#00d0ff] transition-colors shadow-lg shadow-[#00ff88]/20"
+                    >
+                        Plan Your Day
+                    </button>
+                </div>
+            </div>
+        )}
+
       {/* Collapsible Aesthetic Customizer at Top - Takes <= 1/5th screen space */}
       <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-3 shadow-lg select-none">
         <div 
@@ -182,9 +230,6 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
         >
           <div className="flex items-center gap-2">
             <span className="text-xs font-black uppercase tracking-widest text-[#00ff88] font-mono">🎨 Theme & Accent Customizer</span>
-            <span className="text-[10px] bg-[#ff6b1a]/15 text-[#ff6b1a] px-2 py-0.5 rounded font-bold font-mono">
-              Mode: {state.bgTheme || 'midnight'} / Accent: {state.neonTheme || '#ff6b1a'} / Font: {state.fontFamily || 'inter'}
-            </span>
           </div>
           <button className="text-[10px] uppercase font-black text-[#00d4ff] hover:underline font-mono">
             {isCustomizerOpen ? "[ Close Aesthetics ▴ ]" : "[ Customize Colors, Themes & Fonts ▾ ]"}
@@ -393,7 +438,34 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
             // {fmtDate(today)}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {onStartMorning && (
+            <button
+               onClick={onStartMorning}
+               className="flex items-center gap-2 px-4 py-2 text-[10px] font-black bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/40 rounded-xl hover:bg-[#00ff88]/20 transition-all duration-200 uppercase tracking-widest cursor-pointer"
+               title="Morning Briefing"
+            >
+               ☕ START YOUR DAY
+            </button>
+          )}
+          {onStartEvening && (
+            <button
+               onClick={onStartEvening}
+               className="flex items-center gap-2 px-4 py-2 text-[10px] font-black bg-indigo-500/10 text-indigo-400 border border-indigo-500/40 rounded-xl hover:bg-indigo-500/20 transition-all duration-200 uppercase tracking-widest cursor-pointer"
+               title="Evening Debrief"
+            >
+               🌙 CLOSE YOUR DAY
+            </button>
+          )}
+          {onPlanTomorrow && (
+            <button
+               onClick={onPlanTomorrow}
+               className="flex items-center gap-2 px-4 py-2 text-[10px] font-black bg-purple-500/10 text-purple-400 border border-purple-500/40 rounded-xl hover:bg-purple-500/20 transition-all duration-200 uppercase tracking-widest cursor-pointer"
+               title="Plan the next day"
+            >
+               🔮 PLAN TOMORROW
+            </button>
+          )}
           <button
             onClick={() => onNavigate("daily")}
             className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-[#ff6b1a] text-white rounded-xl hover:bg-[#ff9040] transition-all duration-200 uppercase tracking-widest cursor-pointer"
@@ -516,7 +588,7 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
                       style={{ color: cat.neon }}
                     >
                       <span className="text-xs">{cat.icon}</span>
-                      {cat.label}
+                      {getCatLabel(state, cat.id)}
                     </span>
                   </div>
 
@@ -579,13 +651,27 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
                     key={rem.id}
                     className={`flex items-center justify-between p-3 bg-[#0d0d1a]/80 border rounded-xl transition duration-150 ${isOverdue ? "border-rose-500/20 bg-rose-950/10" : "border-[#2a2a50]"}`}
                   >
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-200">
-                        {rem.title}
-                      </h4>
-                      <p className="text-[10px] text-slate-500 mt-1 font-semibold font-mono">
-                        {rem.type} {rem.time && `at ${rem.time}`}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      {onToggleReminder && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onToggleReminder(rem.id); }}
+                          className={`w-5 h-5 rounded flex items-center justify-center border transition-all cursor-pointer ${
+                            rem.status === "done" 
+                              ? "bg-[#00ff88]/20 border-[#00ff88]/50 text-[#00ff88]" 
+                              : "border-[#2a2a50] hover:border-[#00d4ff] text-transparent hover:text-[#00d4ff]/50"
+                          }`}
+                        >
+                          <Check size={12} strokeWidth={3} />
+                        </button>
+                      )}
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-200">
+                          {rem.title}
+                        </h4>
+                        <p className="text-[10px] text-slate-500 mt-1 font-semibold font-mono">
+                          {rem.type} {rem.time && `at ${rem.time}`}
+                        </p>
+                      </div>
                     </div>
 
                     <span
@@ -610,11 +696,118 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
               <div className="h-44 flex flex-col items-center justify-center border border-dashed border-[#2a2a50] rounded-xl">
                 <Bell size={24} className="text-slate-600" />
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-2 font-mono">
-                  // No pending alerts
+                  // System Sequence Nominal. Zero action required.
                 </p>
               </div>
             )}
           </div>
+        </div>
+      </div>
+      
+      {/* Quick Action Tracker */}
+      <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 shadow-sm">
+        <div className="flex items-center justify-between border-b border-[#2a2a50] pb-3 mb-4">
+          <div className="flex items-center gap-2">
+            <Check size={16} className="text-[#00d4ff]" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
+              TODAY'S TRACKER & ROUTINE
+            </h3>
+          </div>
+          <button
+            onClick={() => onNavigate("daily")}
+            className="text-[10px] text-[#00d4ff] hover:text-white hover:underline uppercase tracking-wider font-bold font-mono"
+          >
+            Full View ▸
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {CATS.flatMap(cat => 
+             (state.items[cat.id] || []).map(item => {
+               const d = getDayD(today, cat.id, item);
+               const statusColor = d.status === 'done' ? "bg-[#00ff88]/20 text-[#00ff88] border-[#00ff88]/50" :
+                                   d.status === 'missed' ? "bg-rose-500/20 text-rose-500 border-rose-500/50" :
+                                   d.status === 'skipped' ? "bg-amber-500/20 text-amber-500 border-amber-500/50" :
+                                   "bg-[#0d0d1a] text-slate-400 border-[#2a2a50] hover:border-slate-500";
+               return (
+                 <button
+                   key={`${cat.id}-${item}`}
+                   onClick={() => onCycleStatus && onCycleStatus(cat.id, item)}
+                   className={`px-3 py-1.5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider font-mono border rounded-xl transition cursor-pointer select-none ${statusColor}`}
+                 >
+                   <span className="text-[10px]">{cat.icon}</span> {item}
+                 </button>
+               )
+             })
+          )}
+          {CATS.every(cat => (state.items[cat.id] || []).length === 0) && (
+             <p className="text-[10px] uppercase text-slate-500 font-mono">No habits tracked yet. Add them in Daily Tracker.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Financial Summary Block */}
+      <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 cursor-pointer hover:border-slate-700 transition" onClick={() => onNavigate("finances")}>
+        <div className="flex items-center gap-2 border-b border-[#2a2a50] pb-3 mb-4">
+          <p className="text-[#00ff88] font-bold text-lg leading-none">$</p>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
+            FINANCIAL SUMMARY (TODAY)
+          </h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {(() => {
+            const todayExps = (state.finances || []).filter(tx => tx.date === today);
+            const income = todayExps.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+            const expense = todayExps.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            const todayGoals = state.dailyFinanceGoals?.[today] || { incomeTarget: 0, expenseLimit: 0, actualIncome: 0, actualExpense: 0 };
+            
+            // Allow manual overrides from debrief, or calculated from todayExps
+            const finalI = (todayGoals.actualIncome || 0) > income ? todayGoals.actualIncome : income;
+            const finalE = (todayGoals.actualExpense || 0) > expense ? todayGoals.actualExpense : expense;
+
+            const incPct = todayGoals.incomeTarget > 0 ? Math.min(100, Math.round((finalI / todayGoals.incomeTarget) * 100)) : (finalI > 0 ? 100 : 0);
+            const expPct = todayGoals.expenseLimit > 0 ? Math.min(100, Math.round((finalE / todayGoals.expenseLimit) * 100)) : (finalE > 0 ? 100 : 0);
+
+            return (
+              <>
+                <div className="bg-[#0d0d1a] border border-[#2a2a50] p-3 rounded-xl border-l-2 border-l-[#00ff88]">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">INCOME (TODAY)</p>
+                  <div className="flex items-end justify-between">
+                    <p className="text-xl font-bold text-[#00ff88] font-mono">${finalI.toFixed(2)}</p>
+                    {todayGoals.incomeTarget > 0 && <span className="text-[10px] text-slate-400 bg-[#111120] px-1 rounded">/ ${todayGoals.incomeTarget}</span>}
+                  </div>
+                  {todayGoals.incomeTarget > 0 && (
+                      <div className="w-full bg-[#111120] h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div className="h-full bg-[#00ff88]" style={{ width: `${incPct}%` }}></div>
+                      </div>
+                  )}
+                </div>
+                <div className="bg-[#0d0d1a] border border-[#2a2a50] p-3 rounded-xl border-l-2 border-l-[#ff00a0]">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">SPENT (TODAY)</p>
+                  <div className="flex items-end justify-between">
+                    <p className="text-xl font-bold text-[#ff00a0] font-mono">${finalE.toFixed(2)}</p>
+                    {todayGoals.expenseLimit > 0 && <span className="text-[10px] text-slate-400 bg-[#111120] px-1 rounded">/ ${todayGoals.expenseLimit}</span>}
+                  </div>
+                  {todayGoals.expenseLimit > 0 && (
+                      <div className="w-full bg-[#111120] h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div className={`h-full ${expPct > 100 ? 'bg-rose-500' : 'bg-[#ff00a0]'}`} style={{ width: `${expPct}%` }}></div>
+                      </div>
+                  )}
+                </div>
+                {(state.financeGoals || []).slice(0, 2).map(goal => (
+                   <div key={goal.id} className="bg-[#0d0d1a] border border-[#2a2a50] p-3 rounded-xl">
+                     <p className="text-[9px] font-bold text-[#00d4ff] uppercase tracking-widest mb-1 truncate">{goal.title}</p>
+                     <div className="flex items-end justify-between">
+                       <p className="text-lg font-bold text-white font-mono">${goal.currentAmount.toFixed(0)}</p>
+                       <span className="text-[10px] text-slate-400">/ ${goal.targetAmount}</span>
+                     </div>
+                     <div className="w-full bg-[#111120] h-1.5 rounded-full mt-2 overflow-hidden">
+                       <div className="h-full bg-[#00d4ff]" style={{ width: `${Math.min(100, (goal.currentAmount/goal.targetAmount)*100)}%` }}></div>
+                     </div>
+                   </div>
+                ))}
+              </>
+            );
+          })()}
         </div>
       </div>
 

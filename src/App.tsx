@@ -17,12 +17,15 @@ import {
   saveSyncCfg,
   defData,
   CATS,
+  getCatLabel,
   syncGist,
   pullGist,
   syncJSONBin,
   pullJSONBin,
 } from "./utils/storage";
 import { todayStr, periodRange } from "./utils/date";
+import { sendBackgroundNotification } from "./utils/notifications";
+import { openPiP, updatePiPContent, closePiP, isPiPOpen } from "./utils/pip";
 
 export const ALL_FONTS = [
   { id: "inter", label: "Inter (Neo-Grotesque)", family: '"Inter", sans-serif' },
@@ -1096,6 +1099,8 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string, fontFamily?: string) =
 import { StepByStepGuideModal } from "./components/StepByStepGuideModal";
 import { GuidesView } from "./components/GuidesView";
 import { Sidebar } from "./components/Sidebar";
+import { MorningBriefing } from "./components/MorningBriefing";
+import { EveningDebrief } from "./components/EveningDebrief";
 import { DashboardView } from "./components/DashboardView";
 import { DailyTrackerView } from "./components/DailyTrackerView";
 import { GoalsView } from "./components/GoalsView";
@@ -1115,6 +1120,7 @@ import { SketchpadView } from "./components/SketchpadView";
 import { AlertsView } from "./components/AlertsView";
 import { AiAnalystView } from "./components/AiAnalystView";
 import { FocusAudioView } from "./components/FocusAudioWidget";
+import { TelemetryView } from "./components/TelemetryView";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeAestheticBanner } from "./components/ThemeAestheticBanner";
 
@@ -1128,6 +1134,8 @@ import {
   Bot,
   ClipboardCopy,
   Info,
+  ChevronUp,
+  ChevronLeft,
 } from "lucide-react";
 
 import { getFileHandle } from "./utils/ghost";
@@ -1295,10 +1303,213 @@ import { focusAudio } from "./utils/audioSystem";
 export default function App() {
   const [activeView, setActiveView] = useState<string>("dashboard");
   const [viewHistory, setViewHistory] = useState<string[]>([]);
+  const [showMorningBriefing, setShowMorningBriefing] = useState(false);
+  const [showEveningDebrief, setShowEveningDebrief] = useState(false);
+  const [showPlanTomorrow, setShowPlanTomorrow] = useState(false);
+  const [autoStartVoiceLog, setAutoStartVoiceLog] = useState(false);
+  const [autoStartTextLog, setAutoStartTextLog] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      alert("App can be installed directly from your browser. Try clicking 'Add to Home Screen' on mobile or the Install icon in your desktop browser address bar.");
+    }
+  };
+
+  const handleOmniMutations = (data: any) => {
+    if (!data.mutations || !Array.isArray(data.mutations)) return;
+    
+    setAppState(prev => {
+      let next = { ...prev };
+      
+      data.mutations.forEach((mut: any) => {
+         const { type, payload } = mut;
+         if (!payload) return;
+         
+         if (type === 'CREATE_GOAL') {
+             if (!next.financeGoals) next.financeGoals = [];
+             next.financeGoals.push({
+                id: payload.id || "g_" + Date.now(),
+                title: payload.title,
+                targetAmount: payload.targetAmount || 100,
+                currentAmount: payload.currentAmount || 0,
+                deadline: payload.deadline || new Date().toISOString().split("T")[0],
+                category: payload.category || "General"
+             } as any);
+         } else if (type === 'LOG_TRACKER') {
+             if (payload.categoryId && payload.item) {
+                 const ds = payload.date || activeDate;
+                 if (!next.daily[ds]) next.daily[ds] = {};
+                 if (!next.daily[ds][payload.categoryId]) next.daily[ds][payload.categoryId] = {};
+                 
+                 // make sure item exists in schema
+                 if (!next.items[payload.categoryId]) next.items[payload.categoryId] = [];
+                 if (!next.items[payload.categoryId].includes(payload.item)) {
+                     next.items[payload.categoryId].push(payload.item);
+                 }
+
+                 next.daily[ds][payload.categoryId][payload.item] = {
+                     status: payload.status || 'done',
+                     reps: 1, hours: 0, satisfaction: 0, notes: payload.notes || ""
+                 };
+             }
+         } else if (type === 'EDIT_TRACKER') {
+             if (payload.categoryId && payload.item && payload.targetField) {
+                 const ds = payload.date || activeDate;
+                 if (next.daily[ds]?.[payload.categoryId]?.[payload.item]) {
+                    if (payload.targetField === 'reps') {
+                        next.daily[ds][payload.categoryId][payload.item].reps = payload.value || 0;
+                    } else if (payload.targetField === 'hours') {
+                        next.daily[ds][payload.categoryId][payload.item].hours = payload.value || 0;
+                    }
+                 }
+             }
+         } else if (type === 'SET_TRACKER_GOAL') {
+            if (payload.categoryId && payload.item && payload.targetField) {
+                const cat = payload.categoryId;
+                const item = payload.item;
+                const field = payload.targetField;
+                const val = Math.max(0, Number(payload.value) || 0);
+
+                if (!next.repsTarget) next.repsTarget = {};
+                if (!next.hoursTarget) next.hoursTarget = {};
+
+                const targetObj = field === "reps" ? { ...next.repsTarget } : { ...next.hoursTarget };
+                if (!targetObj[cat]) targetObj[cat] = {};
+                targetObj[cat][item] = val;
+
+                next[field === "reps" ? "repsTarget" : "hoursTarget" as any] = targetObj;
+            }
+        } else if (type === 'CREATE_REMINDER') {
+             next.reminders.push({
+                 id: payload.id || "rem_" + Date.now(),
+                 title: payload.title,
+                 dueDate: payload.dueDate || activeDate,
+                 time: payload.time || '12:00',
+                 status: 'pending',
+                 createdAt: new Date().toISOString(),
+                 priority: payload.priority || 'medium',
+                 category: payload.category || 'general'
+             });
+         } else if (type === 'LOG_FINANCE') {
+             if (!next.finances) next.finances = [];
+             next.finances.push({
+                 id: payload.id || "tx_" + Date.now(),
+                 type: payload.type || 'expense',
+                 amount: payload.amount || 0,
+                 currency: payload.currency || 'USD',
+                 concept: payload.concept || 'AI Entry',
+                 category: payload.category || 'General',
+                 date: payload.date || activeDate
+             } as any);
+         } else if (type === 'UPDATE_SETTINGS') {
+             if (payload.theme) next.neonTheme = payload.theme;
+             if (payload.bgTheme) next.bgTheme = payload.bgTheme;
+             if (payload.dailyBudgetLimit !== undefined || payload.dailyIncomeTarget !== undefined) {
+                 if (!next.profile) next.profile = { name: "User", tagline: "", email: "", dailyBudgetLimit: 0, dailyIncomeTarget: 0 };
+                 if (payload.dailyBudgetLimit !== undefined) next.profile.dailyBudgetLimit = payload.dailyBudgetLimit;
+                 if (payload.dailyIncomeTarget !== undefined) next.profile.dailyIncomeTarget = payload.dailyIncomeTarget;
+             }
+         } else if (type === 'APPEND_JOURNAL') {
+             const jd = payload.date || activeDate;
+             if (!next.journals[jd]) {
+                next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
+             }
+             let existingPrompt = next.journalPrompts.find(p => {
+                  const topicLower = payload.topic?.toLowerCase() || "";
+                  const plabel = p.label.toLowerCase();
+                  if (plabel === topicLower || 
+                      plabel.replace(/[^\w\s]/g, "").trim() === topicLower.replace(/[^\w\s]/g, "").trim() ||
+                      p.id === topicLower) {
+                      return true;
+                  }
+                  // Synonyms fallback
+                  if (topicLower.includes("reflection") || topicLower.includes("note") || topicLower.includes("thought") || topicLower.includes("general") || topicLower.includes("diary")) {
+                      return p.id === 'notes';
+                  } else if (topicLower.includes("win") || topicLower.includes("highlight") || topicLower.includes("gratitude")) {
+                      return p.id === 'wins';
+                  } else if (topicLower.includes("blocker") || topicLower.includes("challenge") || topicLower.includes("difficult")) {
+                      return p.id === 'blockers';
+                  } else if (topicLower.includes("tomorrow") || topicLower.includes("focus")) {
+                      return p.id === 'tomorrow';
+                  }
+                  return false;
+              });
+             if (!existingPrompt) {
+                 const labelNormalized = payload.topic ? (payload.topic.charAt(0).toUpperCase() + payload.topic.slice(1)) : "Note";
+                 existingPrompt = { id: "prompt_" + Date.now() + Math.floor(Math.random() * 1000), label: "📌 " + labelNormalized.toUpperCase(), placeholder: `Write under ${labelNormalized}...` };
+                 next.journalPrompts.push(existingPrompt);
+             }
+             const cur = next.journals[jd].sections[existingPrompt.id] || "";
+             next.journals[jd].sections[existingPrompt.id] = cur ? cur + "\n" + payload.text : payload.text;
+         } else if (type === 'UPDATE_JOURNAL_METRICS') {
+             const jd = payload.date || activeDate;
+             if (!next.journals[jd]) {
+                next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
+             }
+             if (payload.mood !== undefined) next.journals[jd].mood = payload.mood;
+             if (payload.energy !== undefined) next.journals[jd].energy = payload.energy;
+             if (payload.addTags && Array.isArray(payload.addTags)) {
+                 const newTags = new Set([...next.journals[jd].tags, ...payload.addTags]);
+                 next.journals[jd].tags = Array.from(newTags);
+             }
+         } else if (type === 'DELETE_ITEM') {
+             if (payload.type === 'reminder') {
+                 next.reminders = next.reminders.filter(r => r.id !== payload.id);
+             } else if (payload.type === 'finance') {
+                 next.finances = next.finances.filter(f => f.id !== payload.id);
+             } else if (payload.type === 'goal') {
+                 next.financeGoals = next.financeGoals.filter(g => g.id !== payload.id);
+             }
+         } else if (type === 'ADD_EXPEDITION') {
+             if (!next.projects) next.projects = [];
+             next.projects.push({
+                 id: payload.id || "exp_" + Date.now(),
+                 title: payload.title,
+                 concept: payload.concept || "AI Generated Expedition",
+                 status: "planning",
+                 startDate: activeDate,
+                 tasks: []
+             } as any);
+         }
+      });
+      
+      saveData(next);
+      return next;
+    });
+
+    if (data.aiResponse) {
+       setCenterToast({ msg: "Global Voice Agent", sub: data.aiResponse });
+       // Auto close after longer time to read
+       setTimeout(() => setCenterToast(null), 8000);
+    }
+  };
 
   const handleNavigate = (newView: string) => {
     if (newView !== activeView) {
       setViewHistory((prev) => [...prev, activeView]);
+      setActiveView(newView);
+    }
+  };
+
+  const handleSidebarNavigate = (newView: string) => {
+    if (newView !== activeView) {
+      setViewHistory([]); // Clear history on direct sidebar navigation
       setActiveView(newView);
     }
   };
@@ -1324,7 +1535,17 @@ export default function App() {
   const [activeDate, setActiveDate] = useState<string>(todayStr());
 
   // Database store
-  const [appState, setAppState] = useState<AppState>(defData());
+  const [appState, setAppState] = useState<AppState>(() => {
+    let loaded = loadData();
+    if (
+      typeof window !== "undefined" &&
+      window.location.search.includes("demo=true") &&
+      !localStorage.getItem("demo_lt_v5")
+    ) {
+      loaded = DEMO_STATE;
+    }
+    return loaded;
+  });
 
   // Cloud sync
   const [syncCfg, setSyncCfg] = useState<SyncConfig>({
@@ -1342,31 +1563,58 @@ export default function App() {
   // Toast status states
   const [toast, setToast] = useState<{
     msg: string;
-    type: "ok" | "nfo";
+    type: "ok" | "nfo" | "action";
+    actionBtn?: { label: string, onClick: () => void };
   } | null>(null);
 
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    if (appState && !appState.onboarding?.[activeView]) {
-      setShowOnboarding(true);
+    if (appState) {
+      if (!appState.onboarding?.hasSeenGlobalOnboarding && !appState.onboarding?.[activeView]) {
+        setShowOnboarding(true);
+      } else {
+        setShowOnboarding(false);
+      }
     }
   }, [activeView, appState?.onboarding]);
 
   const handleDismissOnboarding = () => {
     setShowOnboarding(false);
+    
+    // Also intelligently stow the module guide floater since they finished the master manual.
+    setIsGuideFloaterClosed(true);
+    setCenterToast({
+       msg: "MODULE GUIDE STOWED",
+       sub: "The floating Module Guide banner has been hidden. You can access the manual anytime from the AI Analyst hub."
+    });
+
+    const updatedOnboarding = { ...(appState.onboarding || {}) };
+    const allViews = [
+      "dashboard", "daily", "journal", "expeditions", "finances", "focus_audio", 
+      "sketchpad", "goals", "analytics", "calendar", "telemetry", "ai_analyst", 
+      "reminders", "pomo", "synopsis", "search", "settings", "alerts", "guides", "help", "demo"
+    ];
+    allViews.forEach(v => {
+      updatedOnboarding[v] = true;
+    });
+    updatedOnboarding.hasSeenGlobalOnboarding = true;
+
     setAppState((prev) => ({
       ...prev,
-      onboarding: { ...(prev.onboarding || {}), [activeView]: true },
+      hideGuideFloater: true,
+      onboarding: updatedOnboarding,
     }));
     saveData({
       ...appState,
-      onboarding: { ...(appState.onboarding || {}), [activeView]: true },
+      hideGuideFloater: true,
+      onboarding: updatedOnboarding,
     });
   };
 
   // Pomodoro Shared States
   const [pomoState, setPomoState] = useState<"idle" | "work" | "break">("idle");
+  const [isPomoPaused, setIsPomoPaused] = useState<boolean>(false);
   const [pomoTimeLeft, setPomoTimeLeft] = useState<string>("25:00");
   const [pomoPercent, setPomoPercent] = useState<number>(0);
   const [pomoElapsedSeconds, setPomoElapsedSeconds] = useState<number>(0);
@@ -1408,77 +1656,123 @@ export default function App() {
     let finalPrompt = typeof customPrompt === "string" ? customPrompt : null;
 
     if (!finalPrompt) {
-      let focusData: any = {};
-      if (activeView === "dashboard") focusData = appState;
-      else if (activeView === "daily")
-        focusData = {
-          daily: appState.daily,
-          goals: appState.goals,
-          pomoSessions: appState.pomoSessions,
-        };
-      else if (activeView === "journal")
-        focusData = { journals: appState.journals, daily: appState.daily };
-      else if (activeView === "finances") focusData = appState.finances;
-      else if (activeView === "expeditions") focusData = appState.expeditions;
-      else if (activeView === "reminders") focusData = appState.reminders;
-      else if (activeView === "goals")
-        focusData = {
-          goals: appState.goals,
-          daily: appState.daily,
-          pomoSessions: appState.pomoSessions,
-        };
-      else if (activeView === "pomo") focusData = appState.pomoSessions;
-      else focusData = appState;
+      // Per User Request: Always feed purely all interrelated data for maximum cross-referencing capabilities
+      const focusData = appState;
+      let specificInstructions = "";
+
+      if (activeView === "dashboard") {
+        specificInstructions = `
+### DOMAIN FOCUS: DASHBOARD & GLOBAL MOMENTUM
+- **Objective**: Provide a macro-level assessment of my entire operational momentum based on all interconnected domains across my life.
+- **Deep Analysis**: Analyze the interconnectedness of my daily completion rates, habit streaks, Pomodoro focus times, financial health, and emotional journal entries simultaneously. 
+- **Identify**: Are there specific environmental factors, financial stressors, or time periods that correlate with high or low productivity? 
+- **Output**: Give me a highly advanced "State of the Union" address on my life's operating system.
+`;
+      } else if (activeView === "daily") {
+        specificInstructions = `
+### DOMAIN FOCUS: DAILY TRACKER & ROUTINE OPTIMIZATION
+- **Objective**: Analyze my micro-habits and daily routines within the broader context of my entire life operating system (goals, finances, journals, reminders).
+- **Deep Analysis**: Look at my daily tracking (\`daily\`) and correlate it tightly with my Evening Debriefs, goals (\`goals\`), Focus sessions (\`pomoSessions\`), and emotional triggers in my Journal (\`journals\`).
+- **Identify**: Which habits am I consistently missing? What is the trigger across my entire dataset? Are there specific routines that mathematically lead to a higher overall daily completion rate? Is there a day of the week where my discipline breaks down? Do my pending reminders (\`reminders\`) or financial stress (\`finances\`) cause me to miss habits?
+- **Output**: Provide the most detailed and advanced tactical schedule breakdown possible.
+`;
+      } else if (activeView === "journal") {
+        specificInstructions = `
+### DOMAIN FOCUS: PSYCHOLOGY, MOOD & JOURNALING
+- **Objective**: Conduct a deep psychological and behavioral analysis of my daily journal entries and cross-correlate with all life domains.
+- **Deep Analysis**: Read my text entries, tags, mood (1-5), and energy (1-5) ratings in \`journals\`. Correlate this emotional data broadly with my physical output in \`daily\`, my spending patterns in \`finances\`, and focus in \`pomoSessions\`.
+- **Identify**: What linguistic patterns, tags, financial transactions, or life events (like \`expeditions\`) reliably precede a drop in mood or energy? When my energy is peak (5), what was the exact sequence of events the day before across all modules?
+- **Output**: Output a highly advanced psychological profile and predictive emotional framework.
+`;
+      } else if (activeView === "finances") {
+        specificInstructions = `
+### DOMAIN FOCUS: FINANCIAL LEDGER & RUN-RATE BURN
+- **Objective**: Act as a brutal, forensic financial auditor interpreting my spending across all general life contexts.
+- **Deep Analysis**: Analyze every transaction, categorization, and timestamp. Correlate my spending habits directly with my \`journals\` (do I spend more money when my mood is low?) and my \`daily\` routines (does high spending correlate with missing study habits, or vice versa?).
+- **Identify**: Calculate my true daily burn rate. Am I violating my monthly budget limits? What are my most toxic financial leaks?
+- **Output**: Provide an unparalleled forensic financial breakdown. Link my spending to my habits. Provide a strict, data-driven financial optimization blueprint.
+`;
+      } else if (activeView === "expeditions") {
+        specificInstructions = `
+### DOMAIN FOCUS: TRAVEL & EXPEDITION LOGISTICS
+- **Objective**: Optimize my active and upcoming travel plans with deep context to my daily life constraints.
+- **Deep Analysis**: Review my \`expeditions\` packing lists/destinations. Cross-reference this with my \`finances\` (am I budgeting for these trips?), \`reminders\` (alerts), and \`goals\`.
+- **Identify**: How does travel impact my \`daily\` habit completion rates?
+- **Output**: Provide an elite logistical briefing for my upcoming trips and suggest optimizations for maintaining habits while traveling.
+`;
+      } else if (activeView === "reminders") {
+        specificInstructions = `
+### DOMAIN FOCUS: ALARMS, REMINDERS & COGNITIVE LOAD
+- **Objective**: Analyze my cognitive load and schedule management holistically.
+- **Deep Analysis**: Look at my \`reminders\`, recurring loops, and priority tags. Cross-reference this with my \`finances\` (billing schedules) and \`daily\` habit completion rates.
+- **Identify**: Am I setting too many alarms and suffering from alert fatigue? Are there high-priority tasks I am constantly deferring? 
+- **Output**: Restructure my psychological schedule mapping to end procrastination and alert fatigue based on all connected data.
+`;
+      } else if (activeView === "goals") {
+        specificInstructions = `
+### DOMAIN FOCUS: MACRO GOALS & TARGET ATTRITION
+- **Objective**: Evaluate my long-term trajectory versus my actual short-term execution context.
+- **Deep Analysis**: Compare my defined \`goals\` against the raw execution data in \`daily\` and \`pomoSessions\`, while factoring in \`journals\` mood drops and \`finances\` boundaries.
+- **Identify**: Where is the exact numerical gap between my ambition and my execution? Extrapolate failures mathematically. 
+- **Output**: Provide a strict, cross-correlated reality check on my goals. Give me a drastic multidimensional operational plan.
+`;
+      } else if (activeView === "pomo") {
+        specificInstructions = `
+### DOMAIN FOCUS: DEEP WORK & FLOW PREDICTION
+- **Objective**: Analyze my attention span and deep work capacity.
+- **Deep Analysis**: Analyze \`pomoSessions\` durations and habits. Deeply correlate with \`journals\` (energy levels), \`finances\` (stress), and \`daily\` schedules.
+- **Identify**: What exact combination of time, energy, and prior day activities unlock my longest focus sessions?
+- **Output**: Give me a neuro-optimized flow-state prediction model based strictly on my historical data across all systems.
+`;
+      } else {
+        specificInstructions = `
+### DOMAIN FOCUS: HOLISTIC SYSTEM ANALYSIS
+- **Objective**: Pure advanced mechanism to extract maximum insight.
+- **Deep Analysis**: Cross-reference all modules dynamically to find hidden correlations in my general life.
+- **Output**: Provide the ultimate interconnected lifestyle optimization report.
+`;
+      }
 
       let summaryText = "";
       try {
         summaryText = JSON.stringify(focusData, null, 2);
-        if (summaryText.length > 50000) {
+        if (summaryText.length > 80000) {
           summaryText =
-            summaryText.substring(0, 50000) +
-            "\n... [Data Truncated due to size]";
+            summaryText.substring(0, 80000) +
+            "\n... [Data Truncated due to size but trends remain visible]";
         }
       } catch (e) {
         summaryText = "[Data Overview]";
       }
 
-      finalPrompt = `Hello AI, act as my elite personal analyst and life-optimization executive assistant for my "Omnilife Tracker".
+      finalPrompt = `Hello AI, act as my elite personal analyst, data scientist, and life-optimization executive assistant for my "Omnilife Tracker".
 
-### PURPOSE OF THIS PROMPT:
-I am providing you with my personal data exported from Omnilife Tracker. I want you to perform deep, advanced, personalized analysis to help me optimize my life, habits, productivity, and finances. 
+### OVERALL PRIME DIRECTIVE:
+I am providing you with my personal real-world data exported directly from Omnilife Tracker. I want you to perform a highly advanced, brutal, and mathematically precise analysis to help me optimize my life, habits, productivity, and finances. Do not give generic self-help advice. Base EVERY insight on the exact numbers, correlations, and timestamps provided in the JSON data.
 
-### OMNILIFE TRACKER - SYSTEM ARCHITECTURE & DATA DICTIONARY:
-Omnilife Tracker is a 100% local, offline-first super-app. All my data is stored as a single JSON tree. You need to understand how the modules interlock perfectly to provide holistic insights:
+### OMNILIFE TRACKER - SYSTEM ARCHITECTURE (HOW TO READ THE DATA):
+Omnilife Tracker is a comprehensive life-management engine. All my data is stored as a massive interconnected JSON tree. The modules are deeply interlocked:
+1. **Daily Tracker (\`daily\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in.
+2. **Daily Journal (\`journals\`)**: Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\`, text arrays, and canvas sketches. Crucial for psychological correlation.
+3. **Goals & Targets (\`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Target \`reps\` and \`hours\` for specific tasks.
+4. **Finances (\`finances\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & precise time parsed from file imports (CSV, Excel) and Smart Text Imports (raw SMS/Text). Detailed categorization.
+5. **Pomodoro Focus (\`pomoSessions\`)**: Focus timer logs with start/end timestamps, tasks mapped, and ambient audio states.
+6. **Reminders (\`reminders\`)**: Cognitive load tracking (alerts, recurring loops).
+7. **Expeditions (\`expeditions\`)**: Logistics and packing arrays.
+8. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes in your output to help me optimize, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a 50 USD expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Set my mood to 5 for yesterday", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
 
-1. **Dashboard & Streaks**: The command node. Tracks daily completion rates, active habit streaks, features 50 high-contrast custom SYSTEM COLOR PALETTES and 22 creative UI THEMES with dynamic quotes banners (which can be closed and restored instantly using the glowing green button). Includes a real-time Bio-Climate & Environment Desk parsing live meteorological APIs to track actual temperatures, Air Quality Index (AQI), and wind telemetry based on custom geolocated city searches or device GPS.
-2. **Daily Tracker (\`daily\`)**: [Date] -> [Category: 'health' | 'work' | 'learning' | 'personal'] -> [Task Name]. Contains \`completed\` (boolean), \`qty\` (number, e.g. hours or reps), \`skipped\` (boolean), \`notes\` (string), and \`satisfaction\` (emotional ratings from 1-5).
-   -> *Analysis Note*: Look for days where completing one habit correlates directly with positive emotion ratings and daily consistency.
-3. **Daily Journal (\`journals\`)**: Nested by [Date]. Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\` (array), and \`sketches\` (an array of base64 drawing data URLs from the sketchpad view).
-   -> *Analysis Note*: Correlate mood and energy with drawing activity and daily checker progress.
-4. **Goals & Targets (\`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Contains target \`reps\` and target \`hours\` for specific tasks. Supports automatic calculation or manual overrides.
-5. **Finances (\`finances\`)**: Contains \`accounts\` (name, balance, type), \`transactions\` (amount, category, type: 'income' | 'expense'), \`financeBudgets\` (assigned monthly categories), and financial saving projects featuring sub-task progress metrics/checkbox lists and billing alert schedules.
-6. **Expeditions (\`expeditions\`)**: My trip planner with itinerary dates, packing checkmarks, custom task grids, locator positions, and flight/itinerary travel alarms.
-7. **Pomodoro Focus (\`pomoSessions\`)**: Focus timer logs, allowing users to spawn tasks instantly and optionally write/save them permanently onto the Daily Checklist.
-8. **Reminders (\`reminders\`)**: Core alarm modules populated in the Calendar. Directly integrated with billing dates from Finances and travel countdowns from Expeditions.
-9. **Sketchpad (\`sketches\`)**: Dynamic advanced digital sketchpad drawing entries with geometric shapes (arrows, rectangles, lines, circles), specialized brushes (marker, neon glow highlighter, spray mist airbrush, fine pen, eraser), full history undo/redo states, paper sheet style templates (ruled pages, grid notes, dot layers), and dynamic coupling features allowing users to link sketches directly to specific Daily Journal timelines and tags.
+${specificInstructions}
 
-### MY CURRENT CONTEXT:
-I am currently viewing the [${activeView.toUpperCase()}] module. I am looking for insights specifically related to this view, but you should use the full context provided to give holistic advice.
-
-### EXPORTED JSON DATA (FOR ANALYSIS):
+### EXPORTED JSON DATA MINING TARGET:
 \`\`\`json
 ${summaryText}
 \`\`\`
 
-### INSTRUCTIONS FOR YOUR ANALYSIS:
-1. **Data Ingestion**: Thoroughly parse the provided JSON data. It represents my actual life metrics.
-2. **Correlation & Cross-Analysis**: Connect the dots:
-   - Analyze how my finances, budgets, and balance accounts correlate with my mood levels.
-   - Look at my Pomodoro focus sessions and assess if saving tasks to the checklist keeps my momentum high.
-   - Check if my sketch habits, travel excursions, and reminders prevent routine fatigue.
-3. **Advanced Personalization**: Base all advice *strictly* on the numbers and trends in the data. If I am failing a goal, point it out ruthlessly.
-4. **Actionable Roadmap**: Provide 3-5 specific, stoic, and immediately actionable steps I can take TODAY to fix weak points and accelerate my momentum.
-5. **Tone**: Be professional, analytical, objective, and highly strategic. Pretend you are advising a high-performance executive.`;
+### REQUIRED OUTPUT FORMAT:
+1. **The Hard Truth**: 1-2 paragraphs of brutal, undeniable truths hidden in the data. What am I doing wrong?
+2. **Hidden Correlations**: Bullet points connecting variables across different modules (e.g. "On days you spend >$50 on Food, your Focus hours drop by 40%").
+3. **Strategic Execution Roadmaps**: 3-5 hyper-specific, actionable implementations I must make TODAY to accelerate my momentum, complete with exact numerical targets to hit.
+4. **Tone**: Be professional, stoic, analytical, objective, and highly strategic. No fluff.`;
     }
 
     setAiModal({ isOpen: true, promptText: finalPrompt });
@@ -1500,6 +1794,12 @@ ${summaryText}
 
     const loadedSync = loadSyncCfg();
     setSyncCfg(loadedSync);
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(err => {
+        console.error("Service Worker registration failed:", err);
+      });
+    }
   }, []);
 
   const [ghostOffline, setGhostOffline] = useState(false);
@@ -1520,16 +1820,49 @@ ${summaryText}
   }, []);
 
   // 2. Toast managers
-  const showToast = (msg: string, type: "ok" | "nfo" = "ok") => {
-    setToast({ msg, type });
+  const showToast = (msg: string, type: "ok" | "nfo" | "action" = "ok", actionBtn?: { label: string, onClick: () => void }) => {
+    setToast({ msg, type, actionBtn });
   };
 
   useEffect(() => {
     if (toast) {
-      const tid = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(tid);
+      if (toast.type === "action") {
+         const tid = setTimeout(() => setToast(null), 10000);
+         return () => clearTimeout(tid);
+      } else {
+         const tid = setTimeout(() => setToast(null), 3000);
+         return () => clearTimeout(tid);
+      }
     }
   }, [toast]);
+
+  // Check reminders on loop natively
+  useEffect(() => {
+    const notifyLoop = setInterval(() => {
+      const now = new Date();
+      const yr = now.getFullYear();
+      const mt = String(now.getMonth() + 1).padStart(2, '0');
+      const dy = String(now.getDate()).padStart(2, '0');
+      const currentDate = `${yr}-${mt}-${dy}`;
+      const hrs = String(now.getHours()).padStart(2, '0');
+      const mins = String(now.getMinutes()).padStart(2, '0');
+      const currentTime = `${hrs}:${mins}`;
+
+      appState.reminders?.forEach(rem => {
+        if (rem.status === 'pending' && rem.dueDate === currentDate && rem.time === currentTime) {
+           const guardKey = `notif_${rem.id}_${currentDate}_${currentTime}`;
+           if (!localStorage.getItem(guardKey)) {
+              sendBackgroundNotification(`Reminder: ${rem.title}`, {
+                 body: rem.notes || 'Scheduled alert.',
+                 icon: '/icon.svg'
+              });
+              localStorage.setItem(guardKey, "true");
+           }
+        }
+      });
+    }, 20000); 
+    return () => clearInterval(notifyLoop);
+  }, [appState.reminders]);
 
   // 3. Sync Logger helper
   const logSync = (msg: string) => {
@@ -1659,27 +1992,29 @@ ${summaryText}
   useEffect(() => {
     let intervalId: any = null;
     if (pomoState !== "idle") {
-      intervalId = setInterval(() => {
-        setPomoElapsedSeconds((prev) => {
-          const next = prev + 1;
-          const targetLimit =
-            (pomoState === "work" ? pomoWorkMin : pomoBrkMin) * 60;
+      if (!isPomoPaused) {
+        intervalId = setInterval(() => {
+          setPomoElapsedSeconds((prev) => {
+            const next = prev + 1;
+            const targetLimit =
+              (pomoState === "work" ? pomoWorkMin : pomoBrkMin) * 60;
 
-          if (next >= targetLimit) {
-            clearInterval(intervalId);
-            onPomoCycleCompleted();
-            return 0;
-          }
+            if (next >= targetLimit) {
+              clearInterval(intervalId);
+              onPomoCycleCompleted();
+              return 0;
+            }
 
-          // Format countdown format
-          const rem = targetLimit - next;
-          const m = String(Math.floor(rem / 60)).padStart(2, "0");
-          const s = String(rem % 60).padStart(2, "0");
-          setPomoTimeLeft(`${m}:${s}`);
-          setPomoPercent(next / targetLimit);
-          return next;
-        });
-      }, 1000);
+            // Format countdown format
+            const rem = targetLimit - next;
+            const m = String(Math.floor(rem / 60)).padStart(2, "0");
+            const s = String(rem % 60).padStart(2, "0");
+            setPomoTimeLeft(`${m}:${s}`);
+            setPomoPercent(next / targetLimit);
+            return next;
+          });
+        }, 1000);
+      }
     } else {
       const m = String(pomoWorkMin).padStart(2, "0");
       setPomoTimeLeft(`${m}:00`);
@@ -1687,10 +2022,18 @@ ${summaryText}
     }
 
     return () => clearInterval(intervalId);
-  }, [pomoState, pomoWorkMin, pomoBrkMin]);
+  }, [pomoState, pomoWorkMin, pomoBrkMin, isPomoPaused]);
 
   const onPomoCycleCompleted = () => {
     const isWork = pomoState === "work";
+    
+    // Play sound snippet here if desired...
+    
+    // Native Notification
+    sendBackgroundNotification(isWork ? "Focus Session Complete!" : "Break Finished!", {
+      body: isWork ? `Great job! You focused on ${pomoTaskName || 'your task'} for ${pomoWorkMin} minutes.` : "Time to get back to work!",
+      icon: "/icon.svg"
+    });
 
     if (isWork && pomoTaskName) {
       const minsEarned = pomoWorkMin;
@@ -1768,6 +2111,7 @@ ${summaryText}
       // Auto transitions into breaks
       setPomoState("break");
       setPomoElapsedSeconds(0);
+      setIsPomoPaused(false);
     } else {
       // Completed breaks
       try {
@@ -1859,14 +2203,20 @@ ${summaryText}
     setPomoState("idle");
     setPomoPercent(0);
     setPomoElapsedSeconds(0);
+    setIsPomoPaused(false);
   };
 
   const handleStartPomo = () => {
     if (pomoState !== "idle") return;
     if (!pomoTaskName) return;
 
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
     setPomoState("work");
     setPomoElapsedSeconds(0);
+    setIsPomoPaused(false);
     showToast(`FOCUS LOCKED ON: ${pomoTaskName.toUpperCase()}`, "ok");
   };
 
@@ -1909,8 +2259,8 @@ ${summaryText}
     if (!appState.daily[ds][cat]![item]) {
       appState.daily[ds][cat]![item] = {
         status: "pending",
-        reps: 0,
-        hours: 0,
+        reps: appState.repsTarget[cat]?.[item] ?? 1,
+        hours: appState.hoursTarget[cat]?.[item] ?? 1,
         satisfaction: 0,
         notes: "",
       };
@@ -1932,8 +2282,8 @@ ${summaryText}
 
       const current = dailyNode[ds][cat]![item] || {
         status: "pending",
-        reps: 0,
-        hours: 0,
+        reps: prev.repsTarget[cat]?.[item] ?? 1,
+        hours: prev.hoursTarget[cat]?.[item] ?? 1,
         satisfaction: 0,
         notes: "",
       };
@@ -2118,11 +2468,26 @@ ${summaryText}
   };
 
   // 8. Database mutators
-  const updateProfile = (name: string, tagline: string, email: string) => {
+  const updateProfile = (name: string, tagline: string, email: string, dailyBudgetLimit?: number, dailyIncomeTarget?: number) => {
     setAppState((prev) => {
+      const bgtL = dailyBudgetLimit !== undefined ? dailyBudgetLimit : (prev.profile?.dailyBudgetLimit || 0);
+      const incT = dailyIncomeTarget !== undefined ? dailyIncomeTarget : (prev.profile?.dailyIncomeTarget || 0);
       const next = {
         ...prev,
-        profile: { name, tagline, email },
+        profile: { 
+          ...prev.profile, 
+          name, 
+          tagline, 
+          email, 
+          dailyBudgetLimit: bgtL, 
+          dailyIncomeTarget: incT 
+        },
+        financeBudgets: {
+          d: bgtL,
+          w: bgtL * 7,
+          m: bgtL * 30,
+          y: bgtL * 365
+        }
       };
       saveData(next);
       return next;
@@ -2164,6 +2529,66 @@ ${summaryText}
     showToast("REMOVED CHECKLIST ELEMENT", "nfo");
   };
 
+  const renameItemInput = (cat: TrackerCategory, oldName: string, newName: string) => {
+    if (!newName.trim() || oldName === newName) return;
+    setAppState((prev) => {
+      const next = JSON.parse(JSON.stringify(prev)) as AppState;
+      const cleanNew = newName.trim();
+      
+      // Add cleanNew to items array if not present, and preserve oldName
+      if (next.items && next.items[cat]) {
+        const list = next.items[cat];
+        if (!list.includes(cleanNew)) {
+          list.push(cleanNew);
+        }
+      }
+      
+      // Copy repsTarget from oldName, but do NOT delete oldName targets
+      if (next.repsTarget && next.repsTarget[cat]) {
+        if (next.repsTarget[cat]![oldName] !== undefined) {
+          next.repsTarget[cat]![cleanNew] = next.repsTarget[cat]![oldName];
+        } else {
+          next.repsTarget[cat]![cleanNew] = 1;
+        }
+      }
+      
+      // Copy hoursTarget from oldName, but do NOT delete oldName targets
+      if (next.hoursTarget && next.hoursTarget[cat]) {
+        if (next.hoursTarget[cat]![oldName] !== undefined) {
+          next.hoursTarget[cat]![cleanNew] = next.hoursTarget[cat]![oldName];
+        } else {
+          next.hoursTarget[cat]![cleanNew] = 1;
+        }
+      }
+      
+      // We do NOT modify or rename any daily history records of oldName!
+      // This preserves oldName's historical logs completely separate and untouched.
+
+      // Copy recurringTasks default schedule if any
+      const oldRecKey = `${cat}-${oldName}`;
+      const newRecKey = `${cat}-${cleanNew}`;
+      if (next.recurringTasks && next.recurringTasks[oldRecKey]) {
+          next.recurringTasks[newRecKey] = {
+            ...next.recurringTasks[oldRecKey]
+          };
+      }
+
+      saveData(next);
+      return next;
+    });
+    showToast(`CREATED NEW TASK "${newName.toUpperCase()}" (Old task is kept intact with its historical data!)`, "ok");
+  };
+
+  const handleUpdateCategoryLabel = (cat: TrackerCategory, label: string) => {
+    setAppState((prev) => {
+      const next = { ...prev };
+      if (!next.categoryLabels) next.categoryLabels = {};
+      next.categoryLabels[cat] = label;
+      saveData(next);
+      return next;
+    });
+  };
+
   const updateTargetFields = (
     cat: TrackerCategory,
     item: string,
@@ -2180,6 +2605,16 @@ ${summaryText}
         ...prev,
         [field === "reps" ? "repsTarget" : "hoursTarget"]: targetObj,
       };
+
+      // Also sync it visually with today's specific tracker goals, if they exist for activeDate
+      if (next.daily[activeDate]?.[cat]?.[item]) {
+        if (field === 'hours') {
+           next.daily[activeDate][cat]![item].goalHours = Math.max(0, val || 0);
+        } else {
+           next.daily[activeDate][cat]![item].goalReps = Math.max(0, val || 0);
+        }
+      }
+
       saveData(next);
       return next;
     });
@@ -2383,7 +2818,7 @@ ${summaryText}
       CATS.forEach((c) => {
         (appState.items[c.id] || []).forEach((item) => {
           const entry = getDayD(ds, c.id, item);
-          csv += `${ds},${c.label},"${item.replace(/"/g, '""')}",${entry.status},${entry.reps},${entry.hours},${entry.satisfaction},"${(entry.notes || "").replace(/"/g, '""')}"\n`;
+          csv += `${ds},${getCatLabel(appState, c.id)},"${item.replace(/"/g, '""')}",${entry.status},${entry.reps},${entry.hours},${entry.satisfaction},"${(entry.notes || "").replace(/"/g, '""')}"\n`;
         });
       });
     });
@@ -2557,6 +2992,11 @@ ${summaryText}
             onSetTheme={handleSetTheme}
             onSetBgTheme={handleSetBgTheme}
             onSetFontFamily={handleSetFontFamily}
+            onStartMorning={() => setShowMorningBriefing(true)}
+            onStartEvening={() => setShowEveningDebrief(true)}
+            onPlanTomorrow={() => setShowPlanTomorrow(true)}
+            onToggleReminder={handleToggleReminder}
+            onCycleStatus={(cat, item) => cycleStatus(activeDate, cat as any, item)}
           />
         );
       case "daily":
@@ -2578,6 +3018,9 @@ ${summaryText}
             onUpdateDayField={updateDayField}
             onCycleStatus={cycleStatus}
             onQuickAdd={addItemInput}
+            onRenameItem={renameItemInput}
+            onUpdateCategoryLabel={handleUpdateCategoryLabel}
+            onUpdateTargetFields={updateTargetFields}
             dayStats={dayStats}
             getRepsT={getRepsT}
             streak={calculateStreak}
@@ -2592,6 +3035,11 @@ ${summaryText}
             onSetPomoTask={handleSetPomoTask}
             onSetPomoPreset={handleSetPomoPreset}
             onOpenAIAnalyst={handleOpenAIAnalyst}
+            onOmniCommand={handleOmniMutations}
+            onSaveJournal={handleSaveJournal}
+            onUpdateJournalPrompts={handleUpdateJournalPrompts}
+            autoStartVoice={autoStartVoiceLog}
+            onClearAutoStartVoice={() => setAutoStartVoiceLog(false)}
           />
         );
       case "goals":
@@ -2666,6 +3114,8 @@ ${summaryText}
             onAddReminder={handleAddReminder}
           />
         );
+      case "telemetry":
+        return <TelemetryView state={appState} />;
       case "finances":
         return (
           <FinancesView
@@ -2720,6 +3170,18 @@ ${summaryText}
               setPomoTaskName(name || null);
               setPomoTaskCat(cat);
             }}
+            onTogglePiP={async () => {
+              if (isPiPOpen()) {
+                closePiP();
+                setIsPipEnabled(false);
+              } else {
+                await openPiP();
+                setIsPipEnabled(true);
+              }
+            }}
+            isPipEnabled={isPipEnabled}
+            isPomoPaused={isPomoPaused}
+            onTogglePomoPause={() => setIsPomoPaused(prev => !prev)}
           />
         );
       case "journal":
@@ -2743,6 +3205,109 @@ ${summaryText}
             onAddReminder={handleAddReminder}
             onToggleReminder={handleToggleReminder}
             onNavigate={setActiveView}
+            autoStartVoice={autoStartVoiceLog}
+            onClearAutoStartVoice={() => setAutoStartVoiceLog(false)}
+            autoStartText={autoStartTextLog}
+            onClearAutoStartText={() => setAutoStartTextLog(false)}
+            onOmniCommand={handleOmniMutations}
+            onApplyAiLogs={(actions) => {
+               setAppState(prev => {
+                  const next = { ...prev };
+                  actions.forEach(act => {
+                     const targetD = act.date || activeDate;
+                     if (act.module === "reminders") {
+                        if (!next.reminders) next.reminders = [];
+                        let pLevel: "low" | "medium" | "high" = "medium";
+                        if (act.priority === "high") pLevel = "high";
+                        if (act.priority === "low") pLevel = "low";
+
+                        let remNotes = act.description || "";
+                        if (act.location) {
+                           remNotes = `Location: ${act.location}. ${remNotes}`;
+                        }
+
+                        next.reminders.push({
+                           id: "rem_ai_" + Date.now() + Math.random().toString(36).substring(7),
+                           title: act.title || "AI Alert",
+                           dueDate: targetD,
+                           time: act.time || "",
+                           type: act.type || "Personal",
+                           priority: pLevel,
+                           repeat: act.repeat || "none",
+                           notes: remNotes || "Auto-logged from AI Journal Analysis",
+                           status: "pending",
+                           enableAlert: act.enableAlert !== false,
+                           alertOffset: act.alertOffset || 0
+                        });
+                     } else if (act.module === "finances") {
+                        if (!next.finances) next.finances = [];
+                        next.finances.push({
+                           id: "tx_ai_" + Date.now() + Math.random().toString(36).substring(7),
+                           date: targetD,
+                           timestamp: `${targetD}T12:00:00Z`,
+                           amount: parseFloat(act.amount) || 0,
+                           concept: act.concept || "AI Finance Log",
+                           notes: "Auto-logged from AI Journal Analysis",
+                           category: act.category || "General",
+                           currency: "USD",
+                           source: "user",
+                           type: act.type === "credit" || act.type === "income" ? "credit" : "debit",
+                           counterparty: "General"
+                        });
+                     } else if (act.module === "tracker") {
+                        if (!next.daily[targetD]) next.daily[targetD] = {};
+                        
+                        // Try to find the matching category item
+                        let foundCatId = "habits";
+                        let foundItem = Object.keys(next.items || {}).some(k => next.items[k]?.includes(act.itemTitle)) ? act.itemTitle : null;
+                        
+                        // If not found, add to habits category
+                        if (!foundItem && act.itemTitle) {
+                           if (!next.items["habits"]) next.items["habits"] = [];
+                           if (!next.items["habits"].includes(act.itemTitle)) {
+                              next.items["habits"].push(act.itemTitle);
+                           }
+                           foundItem = act.itemTitle;
+                        }
+
+                        if (foundItem) {
+                           const key = `${foundCatId}_${foundItem}`;
+                           const existing = next.daily[targetD][key] || { status: 'none', reps: 0, hours: 0, notes: '', satisfaction: 5 };
+                           next.daily[targetD][key] = {
+                              ...existing,
+                              status: 'done',
+                              reps: existing.reps + (parseInt(act.reps) || 0),
+                              hours: existing.hours + (parseFloat(act.hours) || 0)
+                           };
+                        }
+                     } else if (act.module === "goals") {
+                        if (!next.goals) next.goals = [];
+                        next.goals.push({
+                           id: "goal_ai_" + Date.now() + Math.random().toString(36).substring(7),
+                           title: act.title || "AI Goal",
+                           target: act.target || "1",
+                           timeline: act.timeline || "monthly",
+                           category: "General",
+                           reps: 0
+                        });
+                     } else if (act.module === "expeditions") {
+                        if (!next.expeditions) next.expeditions = [];
+                        next.expeditions.push({
+                           id: "exp_ai_" + Date.now() + Math.random().toString(36).substring(7),
+                           title: act.title || "AI Expedition",
+                           dateStart: act.dateStart || targetD,
+                           dateEnd: act.dateEnd || targetD,
+                           notes: act.notes || "Auto-logged from AI Journal Analysis",
+                           location: act.location || "",
+                           packList: []
+                        });
+                     }
+                  });
+                  setTimeout(() => saveData(next), 0);
+                  return next;
+               });
+               showToast("AI Auto-Logs applied successfully!", "ok");
+            }}
           />
         );
       case "guides":
@@ -2773,7 +3338,9 @@ ${summaryText}
             onUpdateProfile={updateProfile}
             onAddItem={addItemInput}
             onRemoveItem={removeItemInput}
+            onRenameItem={renameItemInput}
             onUpdateTargetFields={updateTargetFields}
+            onUpdateCategoryLabel={handleUpdateCategoryLabel}
             onOpenRecurringModal={openRecurringModalObj}
             getRecurring={getRecurring}
             syncCfg={syncCfg}
@@ -2819,94 +3386,150 @@ ${summaryText}
         );
       case "ai_analyst":
         return (
-          <AiAnalystView
-            state={appState}
-            onOpenAIAnalyst={handleOpenAIAnalyst}
-            onGeneratePrompt={(module) => {
-              let focusData: any = {};
-              if (module === "all") focusData = appState;
-              else if (module === "daily")
-                focusData = {
-                  daily: appState.daily,
-                  goals: appState.goals,
-                  pomoSessions: appState.pomoSessions,
-                };
-              else if (module === "journals")
-                focusData = {
-                  journals: appState.journals,
-                  daily: appState.daily,
-                };
-              else if (module === "finances") focusData = appState.finances;
-              else if (module === "goals")
-                focusData = {
-                  goals: appState.goals,
-                  daily: appState.daily,
-                  pomoSessions: appState.pomoSessions,
-                };
-              else if (module === "expeditions")
-                focusData = appState.expeditions;
-              else if (module === "focus_audio")
-                focusData = {
-                  pomoSessions: appState.pomoSessions,
-                  daily: appState.daily,
-                };
-              else focusData = appState;
+          <AiAnalystView onGeneratePrompt={(module) => {
+              // Per User Request: Always feed purely all interrelated data for maximum cross-referencing capabilities
+              const focusData = appState;
+              let specificInstructions = "";
+
+              if (module === "dashboard" || module === "all") {
+                specificInstructions = `
+### DOMAIN FOCUS: DASHBOARD & MACRO OMNILIFE MOMENTUM
+- **Objective**: Act as an elite, omniscient Life Operating System analyst trained on vast arrays of behavioral economics, neuroscience, and macro-lifestyle data. Execute a holistic assessment of my operational momentum.
+- **Deep Analysis**: Dynamically crunch data across daily completion rates, habit streaks, absolute Pomodoro focus times, financial ledgers, and emotional journal sentiment logic simultaneously. Uncover hidden behavioral feedback loops.
+- **Identify**: Are there specific environmental variables, silent financial stressors escaping my notice, or circadian energy fluctuations that perfectly correlate with high or low productivity? Factor in human variables (procrastination, burnout limits, erratic schedules).
+- **Output**: Give me an executive "State of the Union" briefing using sophisticated tactical insights. Provide hard numerical correlations and root-cause behavioral psychological analyses.
+`;
+              } else if (module === "daily") {
+                specificInstructions = `
+### DOMAIN FOCUS: DAILY TRACKER, ROUTINE OPTIMIZATION & HABIT DECAY
+- **Objective**: Function as a hyper-advanced behavioral psychologist and data-scientist. Analyze my micro-habits and chaotic daily routines natively within the constraints of my entire life operating system.
+- **Deep Analysis**: Correlate my daily tracking (\`daily\`) with my Evening Debriefs, goals (\`goals\`), absolute Focus durations (\`pomoSessions\`), and emotional sentiment scores derived from my Journal (\`journals\`).
+- **Identify**: Pinpoint exactly which habits suffer from highest attrition rates. What is the overarching trigger cascade? Calculate the mathematical probability of success based on time-of-day execution. Map out my discipline breakdown days. Determine if pending cognitive load (\`reminders\`) or financial stress (\`finances\`) actively degrades my structural routine.
+- **Output**: Provide an unparalleled, statistically-backed tactical optimization schedule.
+`;
+              } else if (module === "journal") {
+                specificInstructions = `
+### DOMAIN FOCUS: PSYCHOLOGY, MOOD SENTIMENT & EMOTIONAL PREDICTIVE MODELING
+- **Objective**: Conduct a clinical-grade psychological and behavioral analysis of my daily unstructured journal entries, cross-referencing all life metrics. This goes beyond simple text analysis.
+- **Deep Analysis**: Forensically read the subtext of my entries, tags, mood (1-5), and energy (1-5) ratings in \`journals\`. Correlate this emotional baseline broadly with physical output (\`daily\`), spending impulse control (\`finances\`), and focus (\`pomoSessions\`).
+- **Identify**: What real-world linguistic patterns, specific micro-purchases, or life events (like \`expeditions\`) reliably foreshadow a depressive drop in mood or energy? Conversely, reverse-engineer my peak flow states (Energy 5): what precise cocktail of events triggered it?
+- **Output**: Output a highly advanced psychological profile, highlighting emotional volatility markers and delivering a predictive emotional stabilization framework.
+`;
+              } else if (module === "finances") {
+                specificInstructions = `
+### DOMAIN FOCUS: BRUTAL FINANCIAL LEDGER & RUN-RATE BURN
+- **Objective**: Embody an elite forensic financial auditor and behavioral economist. Interpret my messy, real-world spending across all life contexts.
+- **Deep Analysis**: Ingest and categorize every single transaction, concept, and timestamp. Map my systemic spending habits back to my psychological state in \`journals\` (do I exhibit erratic spending when energy drops?) and my physical routines in \`daily\` (do high-expense days ruin my disciplined habits?). Track everything against my \`profile.dailyBudgetLimit\` and \`profile.dailyIncomeTarget\` parameters.
+- **Identify**: Calculate my true daily operating burn rate. Am I statistically violating implicit monthly budget limits or missing the daily income target? Identify insidious, compounding financial leaks (the "latte factor" on steroids). 
+- **Output**: Provide an uncompromising forensic financial breakdown. Link spending trauma to habit decay. Architect a strict, data-driven financial survivability and growth blueprint.
+`;
+              } else if (module === "expeditions") {
+                specificInstructions = `
+### DOMAIN FOCUS: TRAVEL, LOGISTICS & CONTEXT SWITCHING
+- **Objective**: Optimize my physical movement, active travel, and expedition plans using deep situational awareness.
+- **Deep Analysis**: Drill down into my \`expeditions\` metadata, packing lists, and destinations. Cross-reference this aggressively with \`finances\` (am I unknowingly bleeding money on trips?), \`reminders\` (travel alerts), and \`goals\` attrition.
+- **Identify**: Mathematically map how physical displacement (travel) impacts my baseline \`daily\` habit completion rates. 
+- **Output**: Deliver elite logistical briefings for my upcoming physical movements. Provide advanced protocol suggestions for minimizing "travel friction" and context-switching fatigue.
+`;
+              } else if (module === "reminders") {
+                specificInstructions = `
+### DOMAIN FOCUS: ALARMS, COGNITIVE LOAD & PROCRASTINATION ENGINEERING
+- **Objective**: Analyze my cognitive debt and schedule management holistically.
+- **Deep Analysis**: Interrogate my \`reminders\`, recurring loops, alert offsets, and priority tags. Cross-reference this load against my \`finances\` (billing deadlines) and \`daily\` habit completion rates.
+- **Identify**: Quantify my alert fatigue. Am I hoarding low-priority tasks to simulate productivity? Are there high-priority tactical tasks I am neurotically deferring? 
+- **Output**: Restructure my psychological schedule map. Devise a system to eradicate procrastination, manage cognitive debt, and neutralize alert fatigue relying unconditionally on the provided raw data.
+`;
+              } else if (module === "goals") {
+                specificInstructions = `
+### DOMAIN FOCUS: MACRO GOALS & TARGET ATTRITION RATES
+- **Objective**: Evaluate the trajectory of my macro life-aspirations versus the cold, hard reality of my short-term execution.
+- **Deep Analysis**: Contrast my idealistic \`goals\` against my raw execution metadata in \`daily\` and \`pomoSessions\`. Factor in \`journals\` mood drops and \`finances\` runway boundaries.
+- **Identify**: Expose the exact numerical chasm between my ambition and my daily execution. Mathematically extrapolate failures predicting precisely when I will abandon a goal based on current pacing.
+- **Output**: Issue a strict, cross-correlated reality check on my life goals. Develop a drastic, unyielding multidimensional operational restructure.
+`;
+              } else if (module === "pomo" || module === "focus_audio") {
+                specificInstructions = `
+### DOMAIN FOCUS: DEEP WORK, NEURO-FLOW STATES & AUDIO CORRELATIONS
+- **Objective**: Become a neuro-optimisation AI. Analyze my attention span and deep work capacity natively within my life context.
+- **Deep Analysis**: Scrutinize \`pomoSessions\` durations, session tags, and focus audio selections. Deeply correlate with \`journals\` (energy levels), \`finances\` (financial security stress), and \`daily\` output schedules.
+- **Identify**: Discover the "God Mode" trigger. What exact combination of time, energy rating, prior day physical activities, and audio tracks unlocks my deepest, longest duration focus sessions? 
+- **Output**: Deliver a neuro-optimized flow-state prediction algorithm derived strictly from my idiosyncratic historical dataset.
+`;
+              } else {
+                specificInstructions = `
+### DOMAIN FOCUS: HOLISTIC HYPER-SYSTEM ANALYSIS
+- **Objective**: Execute an advanced, unrestricted systemic pattern recognition protocol.
+- **Deep Analysis**: Cross-reference all data modules globally to discover invisible correlations, human behavior variations, and systemic inefficiencies hidden in my general life data.
+- **Output**: Present the ultimate interconnected behavioral and lifestyle optimization dossier.
+`;
+              }
 
               let summaryText = "";
               try {
-                summaryText = JSON.stringify(focusData, null, 2);
-                if (summaryText.length > 50000) {
+                // Curate a clean, 360-degree view of the user's data by omitting noisy app states
+                const cleanState = {
+                  Profile: focusData.profile,
+                  Categories_And_Tags: focusData.categories,
+                  Goals_Active: focusData.goals,
+                  Daily_Performance_Log: focusData.daily,
+                  Journal_Entries_And_Mood: focusData.journals,
+                  Financial_Ledger: focusData.finances,
+                  Pomodoro_Focus_Sessions: focusData.pomoSessions,
+                  Reminders_And_Cognitive_Debt: focusData.reminders,
+                  Travel_Expeditions: focusData.expeditions,
+                  Projects: focusData.projects,
+                };
+                summaryText = JSON.stringify(cleanState, null, 2);
+                if (summaryText.length > 500000) {
                   summaryText =
-                    summaryText.substring(0, 50000) +
-                    "\n... [Data Truncated due to size]";
+                    summaryText.substring(0, 500000) +
+                    "\n... [Data Truncated due to size but trends remain visible]";
                 }
               } catch (e) {
-                summaryText = "[Data Overview]";
+                summaryText = "[Data Overview Error]";
               }
 
-              const finalPrompt = `Hello AI, act as my elite personal analyst and life-optimization executive assistant for my "Omnilife Tracker".
+              const finalPrompt = `Hello AI, act as my elite personal analyst, data scientist, and life-optimization executive assistant for my "Omnilife Tracker".
 
-### PURPOSE OF THIS PROMPT:
-I am providing you with my personal data exported from Omnilife Tracker. I want you to perform deep, advanced, personalized analysis to help me optimize my life, habits, productivity, and finances. 
+### OVERALL PRIME DIRECTIVE
+I am providing you with my personal real-world data exported directly from Omnilife Tracker. I want you to perform a highly advanced, brutal, and mathematically precise analysis to help me optimize my life, habits, productivity, and finances. Do not give generic self-help advice. Base EVERY insight on the exact numbers, correlations, and timestamps provided in the JSON data.
 
-### OMNILIFE TRACKER - SYSTEM ARCHITECTURE & DATA DICTIONARY:
-Omnilife Tracker is a 100% local, offline-first super-app. All my data is stored as a single JSON tree. You need to understand how the modules interlock to provide holistic insights:
+### OMNILIFE TRACKER - SYSTEM ARCHITECTURE (HOW TO READ THE DATA)
+Omnilife Tracker is a comprehensive life-management engine. All my data is stored as a massive interconnected JSON tree. The modules are deeply interlocked:
+1. **Daily Tracker (\`Daily_Performance_Log\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in.
+2. **Daily Journal (\`Journal_Entries_And_Mood\`)**: Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\`, text arrays, and canvas sketches. Crucial for psychological correlation.
+3. **Goals & Targets (\`Goals_Active\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Target \`reps\` and \`hours\` for specific tasks.
+4. **Finances (\`Financial_Ledger\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & precise time parsed from file imports (CSV, Excel) and Smart Text Imports (raw SMS/Text). Detailed categorization.
+5. **Pomodoro Focus (\`Pomodoro_Focus_Sessions\`)**: Focus timer logs with start/end timestamps, tasks mapped, and ambient audio states.
+6. **Reminders (\`Reminders_And_Cognitive_Debt\`)**: Cognitive load tracking (alerts, recurring loops).
+7. **Expeditions (\`Travel_Expeditions\`)**: Logistics and packing arrays.
+8. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes in your output to help me optimize, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a $50 expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Set my mood to 5 for yesterday", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
 
-1. **Dashboard & Streaks**: The command node. Tracks daily completion rates and active habit streaks.
-2. **Daily Tracker (\`daily\`)**: [Date] -> [Category: 'health' | 'work' | 'learning' | 'personal'] -> [Task Name]. Contains \`completed\` (boolean), \`qty\` (number, e.g. hours or reps), \`skipped\` (boolean), \`notes\` (string).
-   -> *Analysis Note*: Look for days where completing one habit (e.g. sleep) correlates with completing another (e.g. work). Find gaps or "skipped" chains.
-3. **Daily Journal (\`journals\`)**: Nested by [Date]. Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`location\` (GPS string), \`tags\` (array), \`prompts\` (text responses), \`notes\` (freeform text).
-   -> *Analysis Note*: This is critical. Correlate \`mood\` and \`energy\` with the \`daily\` habit completion rates. Does low energy follow high spending? Does high mood follow exercise?
-4. **Goals & Targets (\`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Contains target \`reps\` and target \`hours\` for specific tasks. The app aggregates \`daily\` logs and \`pomoSessions\` to calculate progress.
-5. **Finances (\`finances\`)**: Contains \`accounts\` (name, balance, type), \`transactions\` (amount, category, type: 'income' | 'expense', and array of \`tasks\` for financial goals). We run analysis against \`financeBudgets\`.
-   -> *Analysis Note*: Analyze my burn rate and financial goals. Warn me if my expenses exceed my income trajectory or budget limits. Check if my manual financial tasks/goals are being met.
-6. **Expeditions (\`expeditions\`)**: My trip planner with itinerary dates, packing lists, custom goals (\`customTasks\`), and locations. Can be linked to Alerts, Reminders, and Calendar seamlessly. Note that expeditions directly trigger alert timelines.
-7. **Pomodoro (\`pomoSessions\`)**: Focus timer logs. Array of { taskName, category, durationMinutes, timestamp }. Heavily integrated with Focus Audio.
-   -> *Analysis Note*: Cross-reference these with my \`goals\` and \`daily\` tasks. Am I actually spending time effectively? Does Focus Audio ("brown noise," "rain," etc.) correlate with longer sessions?
-8. **Reminders (\`reminders\`)**: One-off and recurring tasks with \`priority\` ('high'|'medium'|'low'), \`dueDate\`, \`time\`, and \`enableAlert\`. Reminders are directly spawned from Expeditions and Finances for billing and trip alerts.
-9. **Focus Audio**: Embedded ambient audio states. Notice how audio states integrate directly with Pomodoro sessions to lower stress and induce flow.
-10. **Sketchpad**: Advanced digital drawing tool equipped with vector geometric shapes, specialized brushes (spray, neon glow, pen, marker, eraser), complete undo/redo history, and patterns (grid, ruled, dots). Save sketches locally and attach directly to Daily Journal logs.
-11. **Settings / Theme Customization**: Custom color palette config, 20 custom structural typography layout layout engines, and 22 visual theme choices with customized aesthetic quotes, live banners, and stickers configured dynamically. The top visual banner can be closed for screen efficiency, and restored instantly in-place via the glowing green 'Restore Quote Banner' button.
-12. **Bio-Climate & Indoor/Outdoor Environment Desk**: Real-time environmental climate control deck. Tracks actual, real-time meteorological metrics (temperature, weather condition, windspeed, Air Quality Index AQI, and UV index) fetched dynamically via live geocoded coordinate searches or device GPS, alongside indoor sensory biome metrics (CO2 ppm, temperature, comfortable ranges, purifier controls). Used to analyze how ambient climate correlates with focus consistency.
-13. **Synopsis**: Digested metrics sent to Email, Telegram, and SMS.
-   
-### MY CURRENT CONTEXT:
-I am submitting data for the module: [${module.toUpperCase()}]. Focus your analysis primarily on this dataset, but weave in the greater context conceptually.
+${specificInstructions}
 
-### EXPORTED JSON DATA (FOR ANALYSIS):
+### EXPORTED JSON DATA MINING TARGET
 \`\`\`json
 ${summaryText}
 \`\`\`
 
-### INSTRUCTIONS FOR YOUR ANALYSIS:
-1. **Data Ingestion**: Thoroughly parse the provided JSON data. It represents my actual life metrics.
-2. **Correlation & Cross-Analysis**: Do not just summarize. Connect the dots.
-   - If \`journals\` and \`daily\` data are present: How do my habits directly impact my \`mood\` and \`energy\`?
-   - If \`finances\` and \`journals\` are present: Do I spend more money on low-energy days?
-   - What are my strongest consistency loops? Where are the breaking points in my streaks?
-3. **Advanced Personalization**: Base all advice *strictly* on the numbers and trends in the data. If I am failing a goal, point it out ruthlessly.
-4. **Actionable Roadmap**: Provide 3-5 specific, stoic, and immediately actionable steps I can take TODAY to fix weak points and accelerate my momentum.
-5. **Tone**: Be professional, analytical, objective, and highly strategic. Pretend you are advising a high-performance executive.`;
+### REQUIRED OUTPUT FORMAT
+Ensure your response is pristine Markdown. Use bolding to highlight specific data points and numerical correlations.
+
+## 1. The Hard Truth
+1-2 paragraphs of brutal, undeniable truths hidden in the data. What am I doing wrong? What are the biggest leaks in my system?
+
+## 2. Hidden Correlations
+Bullet points connecting variables across different modules. 
+*Example: "On days you spend >$50 on Food, your Focus hours drop by 40%."*
+
+## 3. Strategic Execution Roadmaps
+3-5 hyper-specific, actionable implementations I must make TODAY to accelerate my momentum, complete with exact numerical targets to hit. 
+
+## 4. NLP Auto-Log Instructions (Crucial)
+Provide 3-5 exact, natural-language commands based on your Roadmap that I can copy-paste back into my "Omnilife Voice/Text Auto-Log" engine to instantly set up reminders, fix budgets, or adjust goals. 
+*Example: "Create a reminder to review weekly finances every Sunday at 8 PM."*
+
+**Tone**: Be professional, stoic, analytical, objective, and highly strategic. No fluff.`;
 
               handleOpenAIAnalyst(finalPrompt);
             }}
@@ -2918,6 +3541,98 @@ ${summaryText}
   };
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isPipEnabled, setIsPipEnabled] = useState(false);
+  
+  useEffect(() => {
+    if (isPiPOpen()) {
+        const color = pomoState === 'work' ? '#00ff88' : (pomoState === 'break' ? '#00d4ff' : '#aaaaaa');
+        const pct = Math.round(pomoPercent * 100);
+        updatePiPContent(`
+          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; height:100vh;">
+            <div style="font-size:10px; color:#ccc; text-transform:uppercase; font-weight:bold; letter-spacing:2px; font-family: monospace;">
+              ${pomoState === 'idle' ? 'IDLE' : (pomoState === 'break' ? '☕ ON BREAK' : '🔥 FOCUS MODE')}
+            </div>
+            <div style="font-size:11px; font-weight:bold; color:#fff; text-transform:uppercase; margin-top:-4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90%;">
+              ${pomoTaskName || 'Awaiting target'}
+            </div>
+            <div style="font-size:32px; font-weight:bold; color:${color}; margin: 2px 0; font-family: monospace;">${pomoTimeLeft}</div>
+            <div style="width:200px; height:4px; background:#222; border-radius:4px; overflow:hidden;">
+              <div style="width:${pct}%; height:100%; background:${color}; transition: width 1s linear;"></div>
+            </div>
+          </div>
+        `);
+    }
+  }, [pomoTimeLeft, pomoPercent, pomoState, pomoTaskName]);
+
+  // 1. Service Worker action listener for Pomodoro controls from notification clicks
+  useEffect(() => {
+    const handleSWMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'POMO_ACTION') {
+        const action = event.data.action;
+        if (action === 'pause') {
+          setIsPomoPaused(true);
+        } else if (action === 'resume') {
+          setIsPomoPaused(false);
+        } else if (action === 'stop') {
+          stopPomo();
+        }
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSWMessage);
+    }
+    return () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+      }
+    };
+  }, [pomoState, pomoElapsedSeconds, pomoTaskName, pomoTaskCat]);
+
+  // 2. Synchronize internal Pomodoro state and timer to native OS background notification
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const syncNotification = async () => {
+      if ('serviceWorker' in navigator && Notification.permission === 'granted') {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) {
+          if (pomoState !== 'idle') {
+            const title = pomoState === 'work' ? "🔥 Focus Mode Active" : "☕ Break Active";
+            const taskLabel = pomoTaskName || 'Unassigned';
+            const statusLabel = isPomoPaused ? 'PAUSED' : 'RUNNING';
+            const body = `${pomoTimeLeft} remaining | Target: ${taskLabel} (${statusLabel})`;
+            
+            const actions = isPomoPaused 
+              ? [
+                  { action: 'resume', title: '▶️ Resume' },
+                  { action: 'stop', title: '🛑 Stop' }
+                ]
+              : [
+                  { action: 'pause', title: '⏸️ Pause' },
+                  { action: 'stop', title: '🛑 Stop' }
+                ];
+            
+            reg.showNotification(title, {
+              body,
+              tag: 'pomo_timer',
+              renotify: false,
+              silent: true,
+              icon: '/icon.svg',
+              badge: '/icon.svg',
+              actions: actions
+            } as any);
+          } else {
+            // Dismiss active timer notification if idle
+            const notifications = await reg.getNotifications({ tag: 'pomo_timer' });
+            notifications.forEach(n => n.close());
+          }
+        }
+      }
+    };
+
+    syncNotification();
+  }, [pomoState, pomoTimeLeft, isPomoPaused, pomoTaskName]);
 
   useEffect(() => {
     // Close mobile nav when running active view changes
@@ -2950,31 +3665,48 @@ ${summaryText}
 
       {/* 1. Left Sidebar menu */}
       <div
-        className={`fixed md:relative z-[70] h-full transform transition-transform duration-300 ${isMobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+        className={`fixed md:relative z-[70] md:z-10 h-full transform transition-transform duration-300 ${isMobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
       >
         <Sidebar
           state={appState}
           activeView={activeView}
-          onNavigate={handleNavigate}
+          activeDate={activeDate}
+          onSaveJournal={handleSaveJournal}
+          onNavigate={handleSidebarNavigate}
           syncCfg={syncCfg}
           isSyncing={isSyncing}
           onExportJSON={handleExportJSON}
           onExportCSV={handleExportCSV}
           hasSystemAlerts={syncCfg.lastSync === "error" || ghostOffline}
           onLoadDemo={handleLoadDemo}
+          onStartMorning={() => setShowMorningBriefing(true)}
+          onStartEvening={() => setShowEveningDebrief(true)}
+          onPlanTomorrow={() => setShowPlanTomorrow(true)}
+          onInstallApp={handleInstallApp}
+          onToggleGlobalVoice={() => {
+             setActiveView("daily");
+             setTimeout(() => {
+                setAutoStartVoiceLog(true);
+              }, 100);
+              if (isMobileNavOpen) setIsMobileNavOpen(false);
+          }}
+          onStartAutoLog={() => {
+             setActiveView("journal");
+             setTimeout(() => {
+                setAutoStartTextLog(true);
+             }, 100);
+             if (isMobileNavOpen) setIsMobileNavOpen(false);
+          }}
         />
       </div>
 
       {/* 2. Main Desk space */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative z-[20]">
         {/* Mobile Header Box */}
         <div className="md:hidden flex items-center justify-between p-4 border-b border-[#111120] bg-[#0d0d1a] relative z-40 shrink-0">
-          <h1 className="text-sm font-extrabold tracking-wider text-white">
-            OMNILIFE <span className="text-[#ff6b1a]">TRACKER</span>
-          </h1>
           <button
             onClick={() => setIsMobileNavOpen(true)}
-            className="text-slate-300 hover:text-white"
+            className="text-slate-300 hover:text-white cursor-pointer"
           >
             <div className="space-y-1">
               <div className="w-5 h-0.5 bg-current"></div>
@@ -2982,9 +3714,25 @@ ${summaryText}
               <div className="w-5 h-0.5 bg-current"></div>
             </div>
           </button>
+
+          <h1 className="text-sm font-extrabold tracking-wider text-white">
+            OMNILIFE <span className="text-[#ff6b1a]">TRACKER</span>
+          </h1>
         </div>
 
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 scrollbar-none w-full max-w-full">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 scrollbar-none w-full max-w-full relative">
+          
+          {/* Floating Back Button (Right side of Sidebar) to avoid scrolling to top */}
+          {viewHistory.length > 0 && (
+            <button
+              onClick={goBackView}
+              className="fixed bottom-6 left-6 md:left-[260px] z-50 p-3 bg-[#111120] border border-[#2a2a50] hover:border-[#00ff88] hover:bg-[#00ff88]/10 text-[#00ff88] rounded-full shadow-[0_4px_20px_rgba(0,255,136,0.15)] transition-all cursor-pointer group"
+              title="Go Back"
+            >
+              <ChevronLeft size={18} className="group-hover:-translate-x-0.5 transition-transform" />
+            </button>
+          )}
+
           <div className="max-w-[1000px] mx-auto min-h-full flex flex-col pb-8">
             {/* ↩ Dynamic Navigation Back Button */}
             {viewHistory.length > 0 && (
@@ -3025,14 +3773,29 @@ ${summaryText}
       {/* 3. Global Toasts chimes notifications */}
       {toast && (
         <div
-          className={`fixed bottom-4 left-4 md:left-[240px] z-50 px-5 py-3 rounded-xl border flex items-center gap-2 tracking-widest uppercase transition-all duration-300 font-mono text-xs font-black shadow-[0_10px_30px_rgba(0,0,0,0.6)] border-l-4 animate-slide-in-left backdrop-blur-md ${
+          className={`fixed bottom-4 left-4 md:left-[240px] z-[110] px-5 py-3 rounded-xl border flex flex-col gap-2 tracking-widest uppercase transition-all duration-300 font-mono text-xs font-black shadow-[0_10px_30px_rgba(0,0,0,0.6)] border-l-4 animate-slide-in-left backdrop-blur-md ${
             toast.type === "ok"
               ? "bg-[#0a0f1d]/85 text-emerald-400 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.25)]"
+              : toast.type === "action" 
+              ? "bg-[#0d0d1a]/95 text-indigo-400 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.25)]"
               : "bg-[#181111]/85 text-[#ff6b1a] border-[#ff6b1a] shadow-[0_0_20px_rgba(255,107,26,0.25)]"
           }`}
         >
-          <span className="shrink-0 text-base">{toast.type === "ok" ? "✓" : "⚡"}</span>
-          <span>// {toast.msg}</span>
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-base">{toast.type === "ok" ? "✓" : toast.type === "action" ? "🌙" : "⚡"}</span>
+            <span>// {toast.msg}</span>
+          </div>
+          {toast.type === "action" && toast.actionBtn && (
+            <button 
+                onClick={() => {
+                   toast.actionBtn!.onClick();
+                   setToast(null);
+                }}
+                className="mt-1 w-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded py-1.5 hover:bg-indigo-500/40 transition flex items-center justify-center"
+            >
+                {toast.actionBtn.label}
+            </button>
+          )}
         </div>
       )}
 
@@ -3221,9 +3984,9 @@ ${summaryText}
 
       {/* Floating global Actions */}
       {appState.hasSeenWelcome && (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
-          {!isGuideFloaterClosed && (
-            <div className="relative font-sans">
+        <div className="fixed bottom-[20px] right-[20px] md:bottom-8 md:right-8 z-50 flex flex-col gap-3">
+          {!appState.hideGuideFloater && !isGuideFloaterClosed && (
+            <div className="relative font-sans animate-fade-in">
               <button
                 onClick={() => setGuideModalOpen(true)}
                 className="flex items-center justify-center gap-2 pl-4 pr-11 py-3 bg-[#111120] border border-[#2a2a50] rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.8)] hover:border-[#00d4ff] text-[#00d4ff] transition-all duration-300 backdrop-blur-md w-full text-left"
@@ -3237,9 +4000,10 @@ ${summaryText}
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsGuideFloaterClosed(true);
+                  saveData({ ...appState, hideGuideFloater: true });
                   setCenterToast({
                     msg: "MODULE GUIDE STOWED",
-                    sub: "The interactive Module Guide banner has been customized. Remember, you can still access full guides anytime by choosing the 'Module Guides' tab in the left sidebar directory."
+                    sub: "The interactive Module Guide banner has been moved. You can access the full interactive Master Tutorials anytime inside the 'AI Analyst' hub!"
                   });
                 }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#2a2a50]/60 hover:bg-[#ff6b1a]/20 border border-slate-700/50 hover:border-[#ff6b1a]/45 text-slate-400 hover:text-[#ff6b1a] transition"
@@ -3252,7 +4016,7 @@ ${summaryText}
           {!isAiAnalystClosed && (
             <div className="relative">
               <button
-                onClick={handleOpenAIAnalyst}
+                onClick={() => handleOpenAIAnalyst()}
                 className="flex items-center justify-center gap-2 pl-4 pr-11 py-3 bg-[#111120] border border-[#2a2a50] rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.8)] hover:border-[#00ff88] text-[#00ff88] transition-all duration-300 backdrop-blur-md w-full text-left"
               >
                 <Bot size={18} />
@@ -3279,15 +4043,47 @@ ${summaryText}
         </div>
       )}
 
+      {showMorningBriefing && (
+        <MorningBriefing 
+           appState={appState}
+           setAppState={setAppState}
+           onClose={() => setShowMorningBriefing(false)}
+        />
+      )}
+
+      {showEveningDebrief && (
+        <EveningDebrief 
+           appState={appState}
+           setAppState={setAppState}
+           onClose={() => setShowEveningDebrief(false)}
+           onNavigate={setActiveView}
+        />
+      )}
+
+      {showPlanTomorrow && (
+        <MorningBriefing 
+           appState={appState}
+           setAppState={setAppState}
+           onClose={() => setShowPlanTomorrow(false)}
+           isPlanTomorrow={true}
+           targetDate={(() => {
+              const d = new Date();
+              d.setDate(d.getDate() + 1);
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+           })()}
+        />
+      )}
+
       <StepByStepGuideModal
         isOpen={guideModalOpen}
         onClose={() => setGuideModalOpen(false)}
         activeView={activeView}
         onHideFloater={() => {
           setIsGuideFloaterClosed(true);
+          saveData({ ...appState, hideGuideFloater: true });
           setCenterToast({
             msg: "MODULE GUIDE STOWED",
-            sub: "The interactive Module Guide banner has been customized. Remember, you can still access full guides anytime by choosing the 'Module Guides' tab in the left sidebar directory."
+            sub: "The interactive Module Guide banner has been moved. You can access the full interactive Master Tutorials anytime inside the 'AI Analyst' hub!"
           });
         }}
       />
@@ -3403,6 +4199,16 @@ ${summaryText}
                 className="w-full py-3 bg-[#aa44ff]/10 hover:bg-[#aa44ff]/20 border border-[#aa44ff]/30 text-[#aa44ff] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 rounded-xl transition shadow-[0_4px_15px_rgba(170,68,255,0.2)]"
               >
                 <ClipboardCopy size={16} /> Copy Full Prompt & Data Package
+              </button>
+
+              <button
+                onClick={() => {
+                   setAiModal({ isOpen: false, promptText: "" });
+                   setShowOnboarding(true);
+                }}
+                className="w-full mt-2 py-3 bg-[#ffaa00]/10 hover:bg-[#ffaa00]/20 border border-[#ffaa00]/30 text-[#ffaa00] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 rounded-xl transition shadow-[0_0_15px_rgba(255,170,0,0.15)]"
+              >
+                <Info size={16} /> Open Interactive Master Manual
               </button>
             </div>
 

@@ -64,7 +64,7 @@ export const CreateReminderModal: React.FC<CreateReminderModalProps> = ({
   const isAlertMode = mode === "alert";
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
       <div className={`bg-[#111120] border ${isAlertMode ? "border-rose-500/40 shadow-rose-500/10" : "border-[#2a2a50] shadow-[#00d4ff]/5"} rounded-2xl w-full max-w-md shadow-2xl flex flex-col transition-all duration-300`}>
         <div className="flex items-center justify-between p-4 border-b border-[#2a2a50]">
           <div className="flex items-center gap-2">

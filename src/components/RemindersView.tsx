@@ -105,7 +105,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
 
   // List calculations
   const list = React.useMemo(() => {
-    let base = [...state.reminders].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    let base = [...state.reminders].sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
 
     if (filter === 'overdue') {
       return base.filter(r => r.dueDate < today && r.status !== 'done');
@@ -261,14 +261,14 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
         ) : (
           <div className="h-48 flex flex-col items-center justify-center border border-dashed border-[#1e1e38] rounded-xl bg-[#0d0d1a]/50">
             <Bell size={32} className="text-slate-800" />
-            <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest mt-2">// No reminders matching filters</p>
+            <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest mt-2">// Cognitive load cleared. System ready.</p>
           </div>
         )}
       </div>
 
       {/* Editor Modal Popup */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+        <div className="fixed inset-0 bg-black/75 z-[300] flex items-center justify-center p-4 backdrop-blur-md">
           <div className="bg-[#0d0d1a] border border-[#2a2a50] rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
             <button 
               onClick={() => setShowModal(false)}

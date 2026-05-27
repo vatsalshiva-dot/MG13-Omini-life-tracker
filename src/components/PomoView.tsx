@@ -35,6 +35,10 @@ interface PomoViewProps {
   onSetAudioVolume?: (v: number) => void;
   onNavigate?: (route: string) => void;
   onSetPomoTask?: (name: string, cat: TrackerCategory, savePermanently?: boolean) => void;
+  onTogglePiP?: () => void;
+  isPipEnabled?: boolean;
+  onTogglePomoPause?: () => void;
+  isPomoPaused?: boolean;
 }
 
 export const PomoView: React.FC<PomoViewProps> = ({
@@ -57,6 +61,10 @@ export const PomoView: React.FC<PomoViewProps> = ({
   onSetAudioVolume = (v: number) => {},
   onNavigate = (route: string) => {},
   onSetPomoTask = (name: string, cat: TrackerCategory, savePermanently?: boolean) => {},
+  onTogglePiP = () => {},
+  isPipEnabled = false,
+  onTogglePomoPause = () => {},
+  isPomoPaused = false,
 }) => {
   const [quickTaskName, setQuickTaskName] = React.useState("");
   const [quickTaskCat, setQuickTaskCat] =
@@ -76,7 +84,8 @@ export const PomoView: React.FC<PomoViewProps> = ({
   const failedCount = workSessions.filter(
     (s) => s.status === "interrupted" || s.status === "failed",
   ).length;
-  const totalMins = workSessions.reduce((sum, s) => sum + s.duration, 0);
+  const totalMinsRaw = workSessions.reduce((sum, s) => sum + s.duration, 0);
+  const totalMins = Math.round(totalMinsRaw * 10) / 10;
   const totalHoursLogged = Math.round((totalMins / 60) * 100) / 100;
 
   // Render arc math
@@ -119,9 +128,9 @@ export const PomoView: React.FC<PomoViewProps> = ({
           <p className="text-[10px] font-black tracking-widest text-slate-500 uppercase mb-4">
             STATUS:{" "}
             {pomoState === "work"
-              ? "⚡ ENGAGED"
+              ? isPomoPaused ? "⏸ WORK PAUSED" : "⚡ ENGAGED"
               : pomoState === "break"
-                ? "☕ TAKING BREAK"
+                ? isPomoPaused ? "⏸ BREAK PAUSED" : "☕ TAKING BREAK"
                 : "○ IDLE READY"}
           </p>
 
@@ -163,7 +172,7 @@ export const PomoView: React.FC<PomoViewProps> = ({
                 {pomoState === "work"
                   ? `${pomoWorkMin} MIN WORK`
                   : pomoState === "break"
-                    ? `${pomoBrkMin} MIN BAR`
+                    ? `${pomoBrkMin} MIN BREAK`
                     : `${pomoWorkMin} min focus`}
               </div>
             </div>
@@ -257,12 +266,24 @@ export const PomoView: React.FC<PomoViewProps> = ({
                 ▶ START SESSION
               </button>
             ) : (
-              <button
-                onClick={onStopPomo}
-                className="px-6 py-2 border border-rose-500 text-rose-500 bg-rose-500/5 font-extrabold text-xs uppercase tracking-widest rounded-lg hover:bg-rose-500/15 transition animate-pulse"
-              >
-                ⏹ STOP SESSION
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={onStopPomo}
+                  className="px-6 py-2 border border-rose-500 text-rose-500 bg-rose-500/5 font-extrabold text-xs uppercase tracking-widest rounded-lg hover:bg-rose-500/15 transition animate-pulse"
+                >
+                  ⏹ STOP SESSION
+                </button>
+                <button
+                  onClick={onTogglePomoPause}
+                  className={`px-6 py-2 border font-extrabold text-xs uppercase tracking-widest rounded-lg transition ${
+                    isPomoPaused
+                      ? "border-[#00ff88] text-[#00ff88] bg-[#00ff88]/5 hover:bg-[#00ff88]/15"
+                      : "border-amber-500 text-amber-500 bg-amber-500/5 hover:bg-amber-500/15"
+                  }`}
+                >
+                  {isPomoPaused ? "▶ RESUME" : "⏸ PAUSE"}
+                </button>
+              </div>
             )}
 
             <button
@@ -282,6 +303,19 @@ export const PomoView: React.FC<PomoViewProps> = ({
               <Headphones size={14} /> AUDIO{" "}
               {audioTrack !== "none" ? "ON" : "OFF"}
             </button>
+
+            {typeof window !== 'undefined' && 'documentPictureInPicture' in window && (
+              <button
+                onClick={onTogglePiP}
+                className={`flex items-center justify-center gap-1.5 px-4 rounded-lg font-extrabold text-[10px] uppercase tracking-widest border transition ${
+                  isPipEnabled
+                    ? "border-[#00d4ff] text-[#00d4ff] bg-[#00d4ff]/10"
+                    : "border-[#1e1e38] text-slate-400 hover:border-slate-500"
+                }`}
+              >
+                <AlertTriangle size={14} /> PiP {isPipEnabled ? "ON" : "OFF"}
+              </button>
+            )}
           </div>
 
           <p
@@ -374,7 +408,7 @@ export const PomoView: React.FC<PomoViewProps> = ({
           <div className="bg-[#0d0d1a] border border-[#1e1e38] rounded-xl p-4">
             <div className="flex justify-between items-center border-b border-[#111120] pb-2 mb-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                TODAY'S JOURNAL SESSIONS
+                TODAY'S FOCUS SESSIONS
               </h3>
               <span className="text-[10px] bg-[#1e1e38] text-slate-400 px-2.5 py-0.5 rounded font-mono font-bold uppercase">
                 {workSessions.length} total

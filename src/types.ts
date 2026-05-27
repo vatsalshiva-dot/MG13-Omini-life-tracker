@@ -2,6 +2,8 @@ export interface Profile {
   name: string;
   tagline: string;
   email: string;
+  dailyBudgetLimit?: number;
+  dailyIncomeTarget?: number;
 }
 
 export type TrackerCategory = 'studies' | 'habits' | 'leisure' | 'custom';
@@ -118,10 +120,19 @@ export interface ExpeditionExpense {
   amount: number;
   currency: string;
   category: string;
-  type?: 'expense' | 'income';
+  type?: string;
   splitWith?: string;
+  splitType?: 'none' | 'lent' | 'borrowed' | 'split-equally';
+  splitAmount?: number;
   links?: string;
   tasks?: FinanceTask[];
+  // Unified Ledger Fields
+  timestamp?: string;
+  counterparty?: string;
+  location?: string;
+  notes?: string;
+  source?: 'quick' | 'advanced' | 'csv';
+  importFileName?: string;
 }
 
 export interface ExpeditionPackItem {
@@ -180,10 +191,12 @@ export interface AppState {
   expeditions: ExpeditionEntry[];
   finances: ExpeditionExpense[];
   financeGoals?: FinancialGoal[];
+  dailyFinanceGoals?: Record<string, { incomeTarget: number, expenseLimit: number, actualIncome?: number, actualExpense?: number }>;
   sketches: SketchEntry[];
   muteGhostAlerts?: boolean;
   neonTheme?: string;
   bgTheme?: string;
   fontFamily?: string;
   hideGuideFloater?: boolean;
+  categoryLabels?: { [category in TrackerCategory]?: string };
 }
