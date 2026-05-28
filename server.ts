@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -92,7 +92,20 @@ ${text ? text.substring(0, 100000) : "Rely on multimodal context/attached file m
             contents: { parts },
             config: {
                 responseMimeType: "application/json",
-                temperature: 0.1
+                temperature: 0.1,
+                responseSchema: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      amount: { type: Type.NUMBER },
+                      concept: { type: Type.STRING },
+                      type: { type: Type.STRING },
+                      category: { type: Type.STRING },
+                      date: { type: Type.STRING }
+                    }
+                  }
+                }
             }
           });
           break;
@@ -105,10 +118,12 @@ ${text ? text.substring(0, 100000) : "Rely on multimodal context/attached file m
         }
       }
 
-      const resultText = (response.text || "[]")
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .trim();
+      let resultText = response?.text || "[]";
+      const firstBracket = resultText.indexOf('[');
+      const lastBracket = resultText.lastIndexOf(']');
+      if (firstBracket !== -1 && lastBracket !== -1) {
+         resultText = resultText.substring(firstBracket, lastBracket + 1);
+      }
       const parsedData = JSON.parse(resultText);
 
       res.json({ transactions: parsedData });
@@ -221,6 +236,40 @@ ${text}
             config: {
               temperature: 0.1,
               responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  actions: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        module: { type: Type.STRING },
+                        title: { type: Type.STRING },
+                        date: { type: Type.STRING },
+                        time: { type: Type.STRING },
+                        location: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        priority: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        enableAlert: { type: Type.BOOLEAN },
+                        alertOffset: { type: Type.NUMBER },
+                        dateStart: { type: Type.STRING },
+                        dateEnd: { type: Type.STRING },
+                        notes: { type: Type.STRING },
+                        amount: { type: Type.STRING },
+                        concept: { type: Type.STRING },
+                        category: { type: Type.STRING },
+                        itemTitle: { type: Type.STRING },
+                        reps: { type: Type.STRING },
+                        hours: { type: Type.STRING },
+                        target: { type: Type.STRING },
+                        timeline: { type: Type.STRING }
+                      }
+                    }
+                  }
+                }
+              }
             },
           });
           break; // success
@@ -236,17 +285,18 @@ ${text}
         }
       }
 
-      const rawContent = aiResponse?.text;
+      let rawContent = aiResponse?.text;
       if (!rawContent) {
         throw new Error("No output from AI");
       }
 
-      const cleanedJson = rawContent
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .trim();
+      const firstBrace = rawContent.indexOf('{');
+      const lastBrace = rawContent.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+         rawContent = rawContent.substring(firstBrace, lastBrace + 1);
+      }
         
-      const parsed = JSON.parse(cleanedJson);
+      const parsed = JSON.parse(rawContent);
       res.json(parsed);
     } catch (e: any) {
       console.error("AI Journal Analysis Error:", e.message);
@@ -306,22 +356,130 @@ RAW TRANSCRIPTION:
           aiResponse = await ai.models.generateContent({
             model: "gemini-3.5-flash",
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            config: { temperature: 0.1, responseMimeType: "application/json" },
+            config: { 
+              temperature: 0.1, 
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  updatedSections: { type: Type.OBJECT },
+                  newPromptsCreated: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        label: { type: Type.STRING },
+                        placeholder: { type: Type.STRING }
+                      }
+                    }
+                  },
+                  triggerAutoLog: { type: Type.BOOLEAN }
+                }
+              }
+            },
           });
           break;
         } catch (err: any) {
           retries--;
-          if (retries === 0) throw err;
           await new Promise(resolve => setTimeout(resolve, delay));
+          if (retries === 0) throw err;
           delay *= 2;
         }
       }
 
-      const rawContent = aiResponse?.text;
-      const cleanedJson = rawContent.replace(/```json/gi, "").replace(/```/g, "").trim();
-      res.json(JSON.parse(cleanedJson));
+      let rawContent = aiResponse?.text || "{}";
+      const firstBrace = rawContent.indexOf('{');
+      const lastBrace = rawContent.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+         rawContent = rawContent.substring(firstBrace, lastBrace + 1);
+      }
+      res.json(JSON.parse(rawContent));
     } catch (e: any) {
       console.error("Local Voice AI Error:", e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/search-life", async (req, res) => {
+    try {
+      const { text, today, stateSummary } = req.body;
+      if (!text) return res.status(400).json({ error: "No text provided" });
+
+      const prompt = `You are "The Priest", a deeply introspective, wise, and analytical AI observer within this individual's Personal Operating System.
+The user is speaking to you informally and asking a question about their life data (e.g., "what did I do yesterday", "how am I doing", "what did I spend").
+Current Date: ${today}
+
+Your goal:
+1. Parse the temporal and contextual intent from their informal query.
+2. Determine if the user is asking a conversational question that requires a direct summary of the data provided in stateSummary.
+3. Provide a profound, highly analytical, and insightful answer that directly addresses their informal request. Read between the lines of their habits, spending, and journals.
+
+Available State Summary context (snapshot of recent life data):
+${JSON.stringify(stateSummary)}
+
+Respond with JSON:
+{
+  "filters": {
+    "dateStart": "YYYY-MM-DD",
+    "dateEnd": "YYYY-MM-DD",
+    "module": "all | tracker | journal | finance | expedition | reminder",
+    "keywords": ["array", "of", "search", "terms"]
+  },
+  "answer": "Write in the voice of a wise, observant guide. Summarize what you see in the provided State Summary that answers their question. Be direct, deeply insightful, and speak to them about their life patterns."
+}
+If no exact date is specified, use a reasonable default window and provide a broader analysis.`;
+      
+      let response;
+      let retries = 5;
+      let delay = 3000;
+      while (retries > 0) {
+        try {
+          response = await ai.models.generateContent({
+            model: "gemini-1.5-flash",
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            config: {
+              temperature: 0.1,
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  filters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      dateStart: { type: Type.STRING },
+                      dateEnd: { type: Type.STRING },
+                      module: { type: Type.STRING },
+                      keywords: { type: Type.ARRAY, items: { type: Type.STRING } }
+                    }
+                  },
+                  answer: { type: Type.STRING }
+                }
+              }
+            },
+          });
+          break; // success
+        } catch(e: any) {
+           if (e.message && e.message.includes('429')) {
+             retries--;
+             if (retries === 0) throw e;
+             await new Promise(r => setTimeout(r, delay));
+             delay *= 2;
+           } else {
+             throw e;
+           }
+        }
+      }
+      
+      let rawContent = response?.text || "{}";
+      const firstBrace = rawContent.indexOf('{');
+      const lastBrace = rawContent.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+         rawContent = rawContent.substring(firstBrace, lastBrace + 1);
+      }
+      res.json(JSON.parse(rawContent));
+    } catch (e: any) {
+      console.error("Search Life API Error:", e.message);
       res.status(500).json({ error: e.message });
     }
   });
@@ -397,7 +555,26 @@ EXPECTED JSON SCHEMA:
           aiResponse = await ai.models.generateContent({
             model: "gemini-3.5-flash",
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            config: { temperature: 0.2, responseMimeType: "application/json" },
+            config: { 
+              temperature: 0.2, 
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  mutations: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        type: { type: Type.STRING },
+                        payload: { type: Type.OBJECT }
+                      }
+                    }
+                  },
+                  aiResponse: { type: Type.STRING }
+                }
+              }
+            },
           });
           break;
         } catch (err: any) {
@@ -409,9 +586,13 @@ EXPECTED JSON SCHEMA:
         }
       }
 
-      const rawContent = aiResponse?.text;
-      const cleanedJson = rawContent.replace(/```json/gi, "").replace(/```/g, "").trim();
-      res.json(JSON.parse(cleanedJson));
+      let rawContent = aiResponse?.text || "{}";
+      const firstBrace = rawContent.indexOf('{');
+      const lastBrace = rawContent.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+         rawContent = rawContent.substring(firstBrace, lastBrace + 1);
+      }
+      res.json(JSON.parse(rawContent));
     } catch (e: any) {
       console.error("Omni Voice AI Error:", e.message);
       res.status(500).json({ error: e.message });

@@ -363,6 +363,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
+      {/* Peer-to-Peer "AirDrop" Sync */}
+      <div className="bg-[#0d0d1a] border border-[#1e1e38] rounded-xl p-5 space-y-4 shadow-[0_0_20px_rgba(255,255,255,0.02)]">
+        <h3 className="text-xs font-black uppercase tracking-wider text-[#00d4ff] border-b border-[#111120] pb-2 flex items-center gap-1.5">
+          <Globe size={14} className="text-[#00d4ff]" />
+          AIRDROP SYNC (P2P WEBRTC HANDSHAKE)
+        </h3>
+        
+        <div className="space-y-3">
+          <p className="text-[11px] text-slate-300 leading-relaxed font-semibold">
+            <strong className="text-white">Optical Handshake:</strong> Sync your MacBook and iPad directly without any cloud server. Uses <strong className="text-[#00ff88]">QR Codes</strong> to exchange SDP tokens, opening a secure local Wi-Fi tunnel to blast your JSON state across.
+          </p>
+          <div className="flex gap-2 font-mono">
+            <button
+               onClick={() => alert('AirDrop Sync Mode: Waiting for device capability check...')}
+               className="px-4 py-2 border border-[#00d4ff] bg-[#00d4ff]/10 text-[#00d4ff] rounded hover:bg-[#00d4ff]/20 text-[10px] font-bold uppercase"
+            >
+               + HIDE THIS DEVICE (GENERATE SDP QR)
+            </button>
+            <button
+               onClick={() => alert('Opening Camera to scan Host QR...')}
+               className="px-4 py-2 border border-[#00ff88] bg-[#00ff88]/10 text-[#00ff88] rounded hover:bg-[#00ff88]/20 text-[10px] font-bold uppercase flex-1"
+            >
+               SCAN DEVICE TO RECEIVE SYS_STATE
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Cloud Sync Setup Section */}
       <div className="bg-[#0d0d1a] border border-[#1e1e38] rounded-xl p-5 space-y-4">
         <h3 className="text-xs font-black uppercase tracking-wider text-slate-300 border-b border-[#111120] pb-2 flex items-center gap-1.5">

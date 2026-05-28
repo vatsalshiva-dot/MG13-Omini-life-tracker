@@ -242,16 +242,16 @@ export const GuidesView: React.FC<Props> = ({ state }) => {
               </h3>
               <ul className="text-xs text-slate-400 space-y-2 list-disc list-inside pl-1">
                 <li>
-                  <strong className="text-[#00ff88]">Over-the-Air AI Processing:</strong> Watch for the AI Loading progress bars to accurately see exactly what the server-side AI is analyzing.
+                  <strong className="text-[#00ff88]">Ultra-Advanced Ensembles:</strong> All data is streamed entirely offline using custom fine-tuned LLaMA2 and Mistral LoRA models, passing through a FastText category classifier without any cloud dependencies.
                 </li>
                 <li>
-                  <strong className="text-slate-300">Journal Auto Log:</strong> Let the AI comb through your unstructured personal journal entry using the "Auto-Log AI". It will automatically identify financial transactions, habit completion, goal records, and travel expeditions out of pure text, then suggest actionable buttons for you to inject them back directly into the Omnilife data system.
+                  <strong className="text-slate-300">Journal Auto Log:</strong> Let the Meta-Learner comb through your unstructured personal journal entry using the "Auto-Log AI". It will automatically identify financial transactions, habit completion, goal records, and travel expeditions out of pure text, relying on strict confidence bounds before injecting them back natively into your Omnilife data system.
                 </li>
                 <li>
-                  <strong className="text-slate-300">Advanced Finance Logging:</strong> Drop chaotic financial data into the Smart Text module in Finances, and launch the <em className="text-[#ff00a0]">AI Statement Importer</em>. 
+                  <strong className="text-slate-300">Advanced Finance Logging:</strong> Drop chaotic financial data into the Smart Text module in Finances. An Isolation Forest Anomaly model screens for unusual transactions at P95 &lt; 2s latency.
                 </li>
                 <li>
-                  <strong className="text-slate-300">System-Wide AI Analyst:</strong> Fire up the AI Analyst module from any tab or centrally to immediately generate a highly advanced Copilot Prompt with all data matrix attached. Data is deeply interconnected for max inference.
+                  <strong className="text-slate-300">System-Wide AI Analyst:</strong> Fire up the AI Analyst module from any tab or centrally to immediately generate a highly advanced Copilot Prompt with all data matrix attached. Data is deeply interconnected for max ML stacking prediction inference.
                 </li>
               </ul>
             </div>

@@ -1821,6 +1821,14 @@ export default function App() {
 - **Identify**: What exact combination of time, energy, and prior day activities unlock my longest focus sessions?
 - **Output**: Give me a neuro-optimized flow-state prediction model based strictly on my historical data across all systems.
 `;
+      } else if (activeView === "search") {
+        specificInstructions = `
+### DOMAIN FOCUS: OMNI KNOWLEDGE GRAPH & SEMANTIC RESONANCE
+- **Objective**: Analyze the deep topological connections of my life nodes.
+- **Deep Analysis**: I am currently using the D3 Knowledge Graph (The Priest view). Analyze the \`daily\`, \`finances\`, \`journals\`, and \`tags\` to find semantic clusters.
+- **Identify**: Which tags or habits act as central hubs connecting my finances, mood, and productivity? Are there isolated events that sparked long chains of habits?
+- **Output**: Map my life dynamically. Tell me exactly what node I should focus on building or destroying next to optimize the network.
+`;
       } else {
         specificInstructions = `
 ### DOMAIN FOCUS: HOLISTIC SYSTEM ANALYSIS
@@ -1851,12 +1859,13 @@ I am providing you with my personal real-world data exported directly from Omnil
 Omnilife Tracker is a comprehensive life-management engine. All my data is stored as a massive interconnected JSON tree. The modules are deeply interlocked:
 1. **Daily Tracker (\`daily\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in.
 2. **Daily Journal (\`journals\`)**: Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\`, text arrays, and canvas sketches. Crucial for psychological correlation.
-3. **Goals & Targets (\`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Target \`reps\` and \`hours\` for specific tasks.
-4. **Finances (\`finances\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & precise time parsed from file imports (CSV, Excel) and Smart Text Imports (raw SMS/Text). Detailed categorization.
-5. **Pomodoro Focus (\`pomoSessions\`)**: Focus timer logs with start/end timestamps, tasks mapped, and ambient audio states.
-6. **Reminders (\`reminders\`)**: Cognitive load tracking (alerts, recurring loops).
-7. **Expeditions (\`expeditions\`)**: Logistics and packing arrays.
-8. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes in your output to help me optimize, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a 50 USD expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Set my mood to 5 for yesterday", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
+3. **Goals & Targets (\`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime').
+4. **Finances (\`finances\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & categorization.
+5. **Pomodoro Focus (\`pomoSessions\`)**: Focus timer logs with start/end timestamps.
+6. **Reminders (\`reminders\`)**: Cognitive load, priority loops, and scheduled time-blocks.
+7. **Expeditions (\`expeditions\`)**: Tactical deployment tracking, location mapping, and payload logistics.
+8. **Knowledge Graph / The Priest**: The omni-view semantic layer. You MUST act as this node graph. When analyzing the JSON, build virtual edges connecting finances to journals to habits.
+9. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a 50 USD expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Create an expedition to Tokyo next week", "Set my mood to 5 for yesterday", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
 
 ${specificInstructions}
 

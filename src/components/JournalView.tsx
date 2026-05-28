@@ -170,6 +170,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [accumulatedTranscript, setAccumulatedTranscript] = useState('');
   const accumulatedTranscriptRef = useRef('');
   useEffect(() => { accumulatedTranscriptRef.current = accumulatedTranscript; }, [accumulatedTranscript]);
+  const baseTranscriptRef = useRef('');
   
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -180,6 +181,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   useEffect(() => {
      if (autoStartVoice) {
         setAccumulatedTranscript('');
+        baseTranscriptRef.current = '';
         if (!isVoiceRecording) {
             toggleVoiceRecording();
         }
@@ -202,6 +204,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   useEffect(() => {
      if (autoStartText) {
         setAccumulatedTranscript('');
+        baseTranscriptRef.current = '';
         const handleFocusAndScroll = () => {
            const textConsole = document.getElementById("omnilife-textarea");
            if (textConsole) {
@@ -245,6 +248,10 @@ export const JournalView: React.FC<JournalViewProps> = ({
     }
 
     userStoppedRecordingRef.current = false;
+    baseTranscriptRef.current = accumulatedTranscriptRef.current;
+    if (baseTranscriptRef.current && !baseTranscriptRef.current.endsWith(' ')) {
+        baseTranscriptRef.current += ' ';
+    }
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -272,6 +279,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     }
 
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     recognition.continuous = true;
     recognition.interimResults = true;
     
@@ -286,8 +294,6 @@ export const JournalView: React.FC<JournalViewProps> = ({
     };
 
     recognition.onresult = (event: any) => {
-       const latestTranscript = accumulatedTranscriptRef.current;
-       let localTranscript = latestTranscript ? latestTranscript + ' ' : '';
        let finalTranscript = '';
        let interimTranscript = '';
        for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -298,13 +304,17 @@ export const JournalView: React.FC<JournalViewProps> = ({
          }
        }
        if (finalTranscript) {
-          localTranscript += finalTranscript;
+          baseTranscriptRef.current += finalTranscript;
        }
-       setAccumulatedTranscript(localTranscript + interimTranscript);
+       setAccumulatedTranscript(baseTranscriptRef.current + interimTranscript);
     };
 
     recognition.onend = () => {
         if (!userStoppedRecordingRef.current) {
+           baseTranscriptRef.current = accumulatedTranscriptRef.current;
+           if (baseTranscriptRef.current && !baseTranscriptRef.current.endsWith(' ')) {
+               baseTranscriptRef.current += ' ';
+           }
            setTimeout(() => {
               if (!userStoppedRecordingRef.current) recognition.start();
            }, 1000);
@@ -389,6 +399,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
         });
 
         setAccumulatedTranscript('');
+        baseTranscriptRef.current = '';
         
         
      } catch(e: any) {
@@ -840,7 +851,10 @@ export const JournalView: React.FC<JournalViewProps> = ({
               <textarea
                 id="omnilife-textarea"
                 value={accumulatedTranscript}
-                onChange={(e) => setAccumulatedTranscript(e.target.value)}
+                onChange={(e) => {
+                  setAccumulatedTranscript(e.target.value);
+                  baseTranscriptRef.current = e.target.value;
+                }}
                 placeholder={
                   isVoiceRecording 
                     ? "🎤 Listening closely... Speak your daily logs or edit them here..." 

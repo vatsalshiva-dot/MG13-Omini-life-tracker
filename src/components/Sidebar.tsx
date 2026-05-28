@@ -166,6 +166,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       section: "GOALS & ANALYSIS",
     },
     {
+      id: "search",
+      label: "Search Your Life",
+      icon: <Search size={14} />,
+      section: "GOALS & ANALYSIS",
+    },
+    {
       id: "telemetry",
       label: "System Telemetry",
       icon: <Cpu size={14} />,
@@ -194,12 +200,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: "synopsis",
       label: "Synopsis & Share",
       icon: <Share2 size={14} />,
-      section: "MANAGE",
-    },
-    {
-      id: "search",
-      label: "Search",
-      icon: <Search size={14} />,
       section: "MANAGE",
     },
     {

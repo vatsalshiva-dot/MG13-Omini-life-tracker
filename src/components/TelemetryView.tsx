@@ -1,6 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { AppState } from '../types';
-import { Activity, Cpu, Database, Network, Clock, HardDrive } from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import { AppState, TrackerCategory } from "../types";
+import {
+  Activity,
+  Cpu,
+  Database,
+  Network,
+  Clock,
+  HardDrive,
+} from "lucide-react";
 
 interface TelemetryViewProps {
   state: AppState;
@@ -12,7 +19,7 @@ export function TelemetryView({ state }: TelemetryViewProps) {
   const [clientEnv, setClientEnv] = useState<any>({});
 
   useEffect(() => {
-    // 1. Calculate Local DB Size (Byte length of stringified AppState)
+    // 1. Calculate Local DB Size
     try {
       const dataStr = JSON.stringify(state);
       const bytes = new Blob([dataStr]).size;
@@ -26,9 +33,9 @@ export function TelemetryView({ state }: TelemetryViewProps) {
     setClientEnv({
       userAgent: navigator.userAgent,
       platform: nav?.userAgentData?.platform || navigator.platform,
-      memory: nav.deviceMemory ? `${nav.deviceMemory} GB` : 'Not Exposed',
-      cores: navigator.hardwareConcurrency || 'Dynamic/Unknown',
-      connection: nav.connection?.effectiveType || 'Unknown',
+      memory: nav.deviceMemory ? `${nav.deviceMemory} GB` : "Not Exposed",
+      cores: navigator.hardwareConcurrency || "Dynamic/Unknown",
+      connection: nav.connection?.effectiveType || "Unknown",
       language: navigator.language,
       vw: window.innerWidth,
       vh: window.innerHeight,
@@ -36,21 +43,21 @@ export function TelemetryView({ state }: TelemetryViewProps) {
 
     // 3. Mount Session Clock
     const timer = setInterval(() => {
-      setSessionTime(prev => prev + 1);
+      setSessionTime((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(timer);
   }, [state]);
 
   const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const padZero = (num: number) => num.toString().padStart(2, '0');
+  const padZero = (num: number) => num.toString().padStart(2, "0");
   const fmtTime = (ss: number) => {
     const h = Math.floor(ss / 3600);
     const m = Math.floor((ss % 3600) / 60);
@@ -96,19 +103,25 @@ export function TelemetryView({ state }: TelemetryViewProps) {
           <p className="text-[10px] text-slate-500 font-mono">
             Encrypted Core DB Weight
           </p>
-          
+
           <div className="mt-4 pt-4 border-t border-[#2a2a50]">
             <p className="text-[11px] text-slate-300 font-mono flex justify-between">
-              <span>Financial Txs:</span> 
-              <span className="text-[#00ff88] font-bold">{state.finances?.length || 0}</span>
+              <span>Financial Txs:</span>
+              <span className="text-[#00ff88] font-bold">
+                {state.finances?.length || 0}
+              </span>
             </p>
             <p className="text-[11px] text-slate-300 font-mono flex justify-between mt-1">
-              <span>Journal Ents:</span> 
-              <span className="text-cyan-400 font-bold">{state.journals ? Object.keys(state.journals).length : 0}</span>
+              <span>Journal Ents:</span>
+              <span className="text-cyan-400 font-bold">
+                {state.journals ? Object.keys(state.journals).length : 0}
+              </span>
             </p>
             <p className="text-[11px] text-slate-300 font-mono flex justify-between mt-1">
-              <span>Alarm Nodes:</span> 
-              <span className="text-purple-400 font-bold">{state.reminders?.length || 0}</span>
+              <span>Alarm Nodes:</span>
+              <span className="text-purple-400 font-bold">
+                {state.reminders?.length || 0}
+              </span>
             </p>
           </div>
         </div>
@@ -124,20 +137,36 @@ export function TelemetryView({ state }: TelemetryViewProps) {
           </h3>
           <div className="font-mono text-[11px] space-y-2 mt-2">
             <div className="flex justify-between items-center bg-[#1a1a2e] p-2 rounded">
-              <span className="text-slate-500 uppercase tracking-widest">Platform</span>
-              <span className="text-[#ff00a0] font-bold">{clientEnv.platform}</span>
+              <span className="text-slate-500 uppercase tracking-widest">
+                Platform
+              </span>
+              <span className="text-[#ff00a0] font-bold">
+                {clientEnv.platform}
+              </span>
             </div>
             <div className="flex justify-between items-center bg-[#1a1a2e] p-2 rounded">
-              <span className="text-slate-500 uppercase tracking-widest">CPU Cores</span>
-              <span className="text-[#ff00a0] font-bold">{clientEnv.cores} Threads</span>
+              <span className="text-slate-500 uppercase tracking-widest">
+                CPU Cores
+              </span>
+              <span className="text-[#ff00a0] font-bold">
+                {clientEnv.cores} Threads
+              </span>
             </div>
             <div className="flex justify-between items-center bg-[#1a1a2e] p-2 rounded">
-              <span className="text-slate-500 uppercase tracking-widest">Device Mem</span>
-              <span className="text-[#ff00a0] font-bold">{clientEnv.memory}</span>
+              <span className="text-slate-500 uppercase tracking-widest">
+                Device Mem
+              </span>
+              <span className="text-[#ff00a0] font-bold">
+                {clientEnv.memory}
+              </span>
             </div>
             <div className="flex justify-between items-center bg-[#1a1a2e] p-2 rounded">
-              <span className="text-slate-500 uppercase tracking-widest">Viewport Res</span>
-              <span className="text-[#ff00a0] font-bold">{clientEnv.vw}x{clientEnv.vh}</span>
+              <span className="text-slate-500 uppercase tracking-widest">
+                Viewport Res
+              </span>
+              <span className="text-[#ff00a0] font-bold">
+                {clientEnv.vw}x{clientEnv.vh}
+              </span>
             </div>
           </div>
         </div>
@@ -157,15 +186,19 @@ export function TelemetryView({ state }: TelemetryViewProps) {
           <p className="text-[10px] text-slate-500 font-mono">
             Current Session Ignition
           </p>
-          
+
           <div className="mt-4 pt-4 border-t border-[#2a2a50]">
             <div className="flex justify-between items-center text-[11px] font-mono mb-2">
               <span className="text-slate-500">Language Lock:</span>
-              <span className="text-emerald-400 font-bold uppercase">{clientEnv.language}</span>
+              <span className="text-emerald-400 font-bold uppercase">
+                {clientEnv.language}
+              </span>
             </div>
             <div className="flex justify-between items-center text-[11px] font-mono">
               <span className="text-slate-500">Uptime State:</span>
-              <span className="text-emerald-400 font-bold uppercase tracking-widest">Nominal</span>
+              <span className="text-emerald-400 font-bold uppercase tracking-widest">
+                Nominal
+              </span>
             </div>
           </div>
         </div>
@@ -173,14 +206,13 @@ export function TelemetryView({ state }: TelemetryViewProps) {
 
       <div className="mt-4 bg-[#0d0d1a] border border-[#2a2a50] p-5 rounded-xl">
         <h3 className="text-[10px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-2 mb-3 border-b border-[#2a2a50] pb-2">
-           <Network size={12} className="text-indigo-400" />
-           Raw Diagnostic Dump / Client UA
+          <Network size={12} className="text-indigo-400" />
+          Raw Diagnostic Dump / Client UA
         </h3>
         <p className="text-[10px] text-slate-500 font-mono break-all leading-relaxed">
-           {clientEnv.userAgent}
+          {clientEnv.userAgent}
         </p>
       </div>
-
     </div>
   );
 }

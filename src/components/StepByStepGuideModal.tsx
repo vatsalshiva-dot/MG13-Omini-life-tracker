@@ -219,6 +219,27 @@ export const StepByStepGuideModal: React.FC<GuideProps> = ({
         },
       ],
     },
+    search: {
+      title: "Omni Knowledge Graph & Search",
+      steps: [
+        {
+          title: "Step 1: Universal Semantic Search",
+          desc: "👉 LOCATE: Open the 'Search Life' module. Enter any query to instantly index across your tracking history, habits, journals, finances, reminders, and expeditions simultaneously.",
+        },
+        {
+          title: "Step 2: Interactive D3 Knowledge Graph",
+          desc: "👉 LOCATE: Below the search overlay, explore the complex topology of your data via the interactive D3 visual network map. Scroll to zoom, click/drag to pan, and click on nodes to pull up the deep Entity Inspector overlay.",
+        },
+        {
+          title: "Step 3: The Priest - Deep Intuition Engine",
+          desc: "👉 LOCATE: Use plain English conversational queries (e.g., 'what did I spend yesterday?'). The Priest (our dual Local + Cloud AI pipeline) automatically builds semantic filters for the Ledger and returns a deeply introspective conversational analysis answering your exact question.",
+        },
+        {
+          title: "Step 4: Central Entity Navigation",
+          desc: "👉 LOCATE: From within the Graph's Node Inspector, hit 'Jump to Context' to warp directly to the related module view on the exact day that entry occurred, keeping your focus completely uninterrupted.",
+        }
+      ]
+    },
     settings: {
       title: "System Vault Core Walkthrough",
       steps: [
@@ -247,7 +268,7 @@ export const StepByStepGuideModal: React.FC<GuideProps> = ({
       },
       {
         title: "Step 2: AI Analysis",
-        desc: "Click the AI Analyst button at any time to export context right to your clipboard, allowing you to get answers, analytics, and suggestions from your preferred AI.",
+        desc: "Click the AI Analyst button at any time to export context right to your clipboard, allowing you to get answers, analytics, and suggestions via the advanced ML stacking prediction inference architecture.",
       },
     ],
   };
@@ -352,7 +373,7 @@ export const StepByStepGuideModal: React.FC<GuideProps> = ({
           <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl text-center shadow-[0_0_15px_rgba(168,85,247,0.15)]">
             <p className="text-[11px] text-slate-200 font-bold leading-relaxed">
               ⭐ <span className="text-purple-400 font-black uppercase tracking-widest">MAJOR HIGHLIGHT (Must Recommended):</span> 
-              <br /> Make sure to check out the <span className="text-[#00ff88]">"Journal & Auto-Log"</span> from the sidebar. Just braindump your day, and the AI automatically logs your habits, moods, and finances directly into the system!
+              <br /> Make sure to check out the <span className="text-[#00ff88]">"Journal & Auto-Log"</span> from the sidebar. Just braindump your day, and the Ultra-Advanced LLM Ensemble Architecture automatically logs your habits, moods, and finances entirely offline!
             </p>
           </div>
           <button

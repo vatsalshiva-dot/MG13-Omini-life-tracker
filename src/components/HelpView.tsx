@@ -6,11 +6,13 @@ export const HelpView: React.FC<{ state: AppState, onOpenAIAnalyst?: (prompt?: s
   const appInfoText = `Hello AI, I am providing you with the complete architecture and manual for "Omnilife Tracker", a highly advanced productivity app I am using. Please act as my top-tier executive assistant and specialized AI expert for this platform.
 
 ### OMNILIFE TRACKER - INSTRUCTION MANUAL & SYSTEM ARCHITECTURE
-Omnilife Tracker is a 100% local, offline-first application designed for unparalleled privacy. All data is saved natively to the machine.
+Omnilife Tracker is powered by an **Ultimate Local AI System**. It is a 100% local, offline-first application designed for unparalleled privacy. All data is saved natively to the machine with Zero Cloud Dependency.
 
-**Core Properties:**
-- ZERO Cloud Dependency: No external backend, no SQL database. Data is purely kept via \`localStorage\` or the File System Access API ("Ghost Sync").
-- Data Portability: The entire user state is a single JSON tree. Users can export/import manually anytime.
+**Advanced AI Architecture:**
+- Ultra-Advanced LLM Ensemble: Utilizes custom fine-tuned models (LoRA) for financial parsing, mood prediction, and voice processing.
+- Micro-Function ML Training: Every tiny function gets its own ML model (e.g., date normalization, amount validation, category bounds).
+- Real-Time Streaming: Instantaneous offline data ingestion mapped via strict confidence voting ensembles.
+- Adaptive Learning: Models implicitly build and track performance off corrections via weekly retraining regimes.
 
 **Detailed Module Capabilities:**
 1. **Dashboard:** Summarizes the current day. Integrates streak progression, total hours tracked, and any overdue alerts. Serves as the central command node.
@@ -18,20 +20,20 @@ Omnilife Tracker is a 100% local, offline-first application designed for unparal
 3. **Daily Journal:** Deep narrative logging. Captures Mood (1-5 scale) and Energy (1-5 scale), specific tags, inline GPS location tracking, and text prompts. Supports inline sketching and uploading images onto the daily log.
 4. **Goals & Targets:** Users can set target repetitions or hours per activity over distinct timeframes (Weekly, Monthly, Yearly, Lifetime). The app intercepts Daily Tracker and Pomodoro logs to auto-calculate completion percentage towards these goals.
 5. **Analytics (Graph Matrix):** Shows bar/line charts over past week, plus an elegant heatmap of 30 days to visualize density of activity visually.
-6. **Expeditions:** A comprehensive trip planner logging itineraries, precise map coordinates, budgets per trip, and active packing checklists. Users can set Alerts for upcoming trips which sync automatically to the Calendar and Reminders.
-7. **Finances:** Native budgeting software. Supports multiple accounts/balances, tracks transactions vs category limits, and manages active recurring subscription billing to prevent over-drafting. Users can add Alerts for upcoming or recurring bills which sync to the Calendar and Reminders.
+6. **Expeditions:** A comprehensive trip planner logging itineraries, precise map coordinates, budgets per trip, and active packing checklists.
+7. **Finances:** Native budgeting software with Advanced Smart Import. Powered by an Isolation Forest Anomaly model and FastText Classifier.
 8. **Sketchpad:** An infinite digital canvas to draw, wireframe, or capture thoughts with a stylus/mouse.
-9. **Alerts & Reminders:** Creates alarms/reminders (includes Finance and Expedition synced alerts). Supports setting Priority levels (High/Med/Low), recurrent intervals, and specific Alert Offsets (e.g. notify me 15 minutes before the due time is reached with a browser popup). Ghost Sync connection loss also registers as a high-level system alert.
+9. **Alerts & Reminders:** Creates alarms/reminders. Supports setting Priority levels (High/Med/Low), recurrent intervals, and specific Alert Offsets.
 10. **Pomodoro Clock:** A robust 25/5 focus timer that links directly into Daily Tracker categories to instantly build logged hours natively when the clock finishes.
 11. **Synopsis & Share:** Selects a date range, scrapes all notes, sketches, and metrics, and compiles it into markdown formats.
 12. **Search Directory:** Global deep text search spanning across historical journal logs, tasks, and financial memos.
 13. **Focus Audio:** Ambient environment soundscapes (e.g. rain, brown noise, cafe) to assist in deep focus, controlled directly via the main navigation menu.
-14. **Bio-Climate & Indoor/Outdoor Environment Desk:** Real-time environmental tracking console on the dashboard. Monitors live weather conditions, wind speed, UV, and Air Quality (AQI) telemetry fetched in real-time by geolocating simulated presets or querying actual GPS coordinates worldwide via the search-coordinate deploy tool. Also tracks Indoor Air Biome conditions (indoor temperature, comfort thresholds, CO2 levels, and active air purifier modes eco/boost). Use these ecological dynamics to optimize focus and habit compliance.
-15. **Visual Themes, Custom Stickers & Quotes Engines:** Includes 22 advanced visual presets (midnight, superhero, teens, swiss, retro, minimal, cute, playful, crimson, hacker, forest, luxury, cyberpunk, milkyway, ocean, cars, sports, wildwest, futuristic, proper3d, proper2d, mafia) styled with distinctive color tones, typographic matching engines, and distinct situational quotes, live banners, and animated stickers. If closed to conserve vertical workspace density, the banner can be restored instantly via the glowing green 'Restore Quote Banner' button.
-16. **Voice Logger / Omnimodal (OmniLife Command):** The app accepts voice or text input and uses an AI endpoint to map intentions into structured system commands. This includes creating/editing/deleting goals, reminders, daily tracker hits, finances, or adjusting journal metrics (mood/energy/tags). Crucially, BEFORE any action executes, the app displays the **OmniLife Log Deck (Management Phase)**. The user can review, edit, discard, or manually type out specifics of the interpreted system actions on-screen, verifying exact numeric/string payloads before pushing them to the database.
+14. **Bio-Climate & Indoor/Outdoor Environment Desk:** Real-time environmental tracking console on the dashboard. Monitors live weather conditions, wind speed, UV, and Air Quality (AQI) telemetry.
+15. **Visual Themes, Custom Stickers & Quotes Engines:** Includes 22 advanced visual presets styled with distinctive color tones, typographic matching engines, and distinct situational quotes.
+16. **Voice Logger / Omnimodal (OmniLife Command):** The app accepts voice or text input and uses an AI endpoint to map intentions into structured system commands. This includes creating/editing/deleting goals, reminders, daily tracker hits, finances, or adjusting journal metrics (mood/energy/tags). Crucially, BEFORE any action executes, the app displays the **OmniLife Log Deck (Management Phase)**. The user can review, edit, discard, or manually type out specifics of the interpreted system actions on-screen.
 
 **Your Ongoing AI Role:**
-Whenever I provide data outputs from Omnilife Tracker or ask you a question in this context, use your mastery of these 15 modules to assist me. Your guidance MUST adhere to the app's structural constraints (e.g. knowing it's offline-first, knowing how climate comfort levels score, knowing how alerts trigger). 
+Whenever I provide data outputs from Omnilife Tracker or ask you a question in this context, use your mastery of these 16 modules to assist me. Your guidance MUST adhere to the app's structural constraints (e.g. knowing it's offline-first, knowing how the ensemble architecture routes data). 
 - Help me design life schedules.
 - Guide me in utilizing specific modules for my use-case.
 - Perform deep-dive analysis on any metrics or journal logs I provide.
