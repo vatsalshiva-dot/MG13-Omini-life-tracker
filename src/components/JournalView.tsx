@@ -59,8 +59,23 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [aiPercent, setAiPercent] = useState(0);
   const [aiActionsModal, setAiActionsModal] = useState<{ isOpen: boolean; actions: any[] }>({ isOpen: false, actions: [] });
-  const [omniModal, setOmniModal] = useState<{ isOpen: boolean; data: any | null }>({ isOpen: false, data: null });
-  const [omniInputModal, setOmniInputModal] = useState<{ isOpen: boolean; mode: 'voice' | 'text'; tempText: string }>({ isOpen: false, mode: 'text', tempText: '' });
+  const [omniModal, setOmniModal] = useState<{ isOpen: boolean; data: any | null; pendingAudio?: string; pendingTranscript?: string }>({ isOpen: false, data: null });
+  const [alertModal, setAlertModal] = useState<{ message: string; title: string } | null>(null);
+
+  const alert = (message: string) => {
+    let title = "System Notification";
+    if (message.includes("Microphone") || message.includes("Mic")) {
+      title = "Microphone Access Required";
+    } else if (message.includes("GPS") || message.includes("Geolocation") || message.includes("coordinates")) {
+      title = "GPS Geolocation Status";
+    } else if (message.includes("Analyst") || message.includes("AI") || message.includes("Omni")) {
+      title = "AI Engine Intelligence";
+    } else if (message.includes("empty") || message.includes("write") || message.includes("speak")) {
+      title = "Journal Field Entry Required";
+    }
+    setAlertModal({ message, title });
+  };
+
 
   const today = date;
   const entry: JournalEntry = state.journals[today] || {
@@ -148,42 +163,88 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
-  // Voice Recording State
+  // Combined OmniLife Voice & Text States
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [isManualEditing, setIsManualEditing] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [accumulatedTranscript, setAccumulatedTranscript] = useState('');
+  const accumulatedTranscriptRef = useRef('');
+  useEffect(() => { accumulatedTranscriptRef.current = accumulatedTranscript; }, [accumulatedTranscript]);
+  
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const userStoppedRecordingRef = useRef(false);
 
   useEffect(() => {
      if (autoStartVoice) {
-        setOmniInputModal({ isOpen: true, mode: 'voice', tempText: '' });
+        setAccumulatedTranscript('');
         if (!isVoiceRecording) {
             toggleVoiceRecording();
         }
+        // Multi-stage robust scroll-into-view to bypass asynchronous rendering frames
+        const handleScroll = () => {
+           const consoleEl = document.getElementById("omnilife-console");
+           if (consoleEl) {
+              consoleEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+           }
+        };
+        setTimeout(handleScroll, 50);
+        setTimeout(handleScroll, 150);
+        setTimeout(handleScroll, 300);
+        setTimeout(handleScroll, 500);
+
         if (onClearAutoStartVoice) onClearAutoStartVoice();
      }
   }, [autoStartVoice]);
 
   useEffect(() => {
      if (autoStartText) {
-        setOmniInputModal({ isOpen: true, mode: 'text', tempText: '' });
+        setAccumulatedTranscript('');
+        const handleFocusAndScroll = () => {
+           const textConsole = document.getElementById("omnilife-textarea");
+           if (textConsole) {
+              textConsole.focus();
+              textConsole.scrollIntoView({ behavior: 'smooth', block: 'center' });
+           }
+        };
+        setTimeout(handleFocusAndScroll, 50);
+        setTimeout(handleFocusAndScroll, 150);
+        setTimeout(handleFocusAndScroll, 300);
+        setTimeout(handleFocusAndScroll, 500);
+
         if (onClearAutoStartText) onClearAutoStartText();
      }
   }, [autoStartText]);
 
+  const stopVoiceAndTracks = () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch(e){}
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try { mediaRecorderRef.current.stop(); } catch(e){}
+    }
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach(track => {
+          track.stop();
+          track.enabled = false;
+        });
+      } catch(e){}
+      mediaStreamRef.current = null;
+    }
+    setIsVoiceRecording(false);
+  };
+
   const toggleVoiceRecording = async () => {
     if (isVoiceRecording) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-      setIsVoiceRecording(false);
+      userStoppedRecordingRef.current = true;
+      stopVoiceAndTracks();
       return;
     }
+
+    userStoppedRecordingRef.current = false;
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -191,34 +252,42 @@ export const JournalView: React.FC<JournalViewProps> = ({
       return;
     }
 
-    // Try to start media recorder for audio persistence
+    // Try starting MediaRecorder/getUserMedia for ambient preview fallback.
+    // In iframes or restricted environments, getUserMedia can fail even if SpeechRecognition is allowed.
+    // Hence, this check is entirely non-blocking!
     try {
-       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-       const mediaRecorder = new MediaRecorder(stream);
-       audioChunksRef.current = [];
-       mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) audioChunksRef.current.push(e.data);
-       };
-       mediaRecorderRef.current = mediaRecorder;
-       mediaRecorder.start();
+       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaStreamRef.current = stream;
+          const mediaRecorder = new MediaRecorder(stream);
+          audioChunksRef.current = [];
+          mediaRecorder.ondataavailable = (e) => {
+             if (e.data.size > 0) audioChunksRef.current.push(e.data);
+          };
+          mediaRecorderRef.current = mediaRecorder;
+          mediaRecorder.start();
+       }
     } catch (e: any) {
-       console.error("Mic access for audio recording denied", e);
-       alert("🎤 Microphone Access Blocked:\n\nPlease make sure to grant microphone permissions in your browser. \n\n💡 Tip: Try clicking 'Open in a new tab' at the top-right of your workspace so the app runs natively outside the preview iframe where permissions are easier to authorize!");
-       return;
+       console.warn("Optional MediaRecorder microphone stream failed, falling back to Web Speech API:", e);
     }
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     
-    let localTranscript = '';
+
+
+    
+
 
     recognition.onstart = () => {
        setIsVoiceRecording(true);
-       setAccumulatedTranscript('');
+       setIsManualEditing(false);
     };
 
     recognition.onresult = (event: any) => {
+       const latestTranscript = accumulatedTranscriptRef.current;
+       let localTranscript = latestTranscript ? latestTranscript + ' ' : '';
        let finalTranscript = '';
        let interimTranscript = '';
        for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -228,33 +297,32 @@ export const JournalView: React.FC<JournalViewProps> = ({
             interimTranscript += event.results[i][0].transcript;
          }
        }
-       
        if (finalTranscript) {
           localTranscript += finalTranscript;
        }
        setAccumulatedTranscript(localTranscript + interimTranscript);
     };
 
-    recognition.onend = async () => {
-       setIsVoiceRecording(false);
-       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-           mediaRecorderRef.current.stop();
-       }
-       if (localTranscript.trim()) {
-          await processVoiceCommand(localTranscript.trim());
-       }
-       setAccumulatedTranscript('');
-    };
+    recognition.onend = () => {
+        if (!userStoppedRecordingRef.current) {
+           setTimeout(() => {
+              if (!userStoppedRecordingRef.current) recognition.start();
+           }, 1000);
+        } else {
+           stopVoiceAndTracks();
+        }
+     };
 
     recognition.onerror = (event: any) => {
-       if (event.error !== 'aborted') {
-          console.error("Speech recognition error:", event.error);
-       }
-       setIsVoiceRecording(false);
-       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-           mediaRecorderRef.current.stop();
-       }
-    };
+        if (event.error !== 'aborted') {
+           console.error("Speech recognition error:", event.error);
+        }
+        if (event.error === 'not-allowed') {
+           alert("🎤 Microphone Access Blocked:\n\nPlease make sure to grant microphone permissions in your browser. \n\n💡 Tip: Try clicking 'Open in a new tab' at the top-right of your workspace so the app runs natively outside the preview iframe where permissions are easier to authorize!");
+           userStoppedRecordingRef.current = true;
+           stopVoiceAndTracks();
+        }
+     };
 
     recognitionRef.current = recognition;
     recognition.start();
@@ -268,64 +336,66 @@ export const JournalView: React.FC<JournalViewProps> = ({
      });
   };
 
-  const processVoiceCommand = async (transcript: string) => {
+  const handleExecuteOmniCommand = async () => {
+     if (isVoiceRecording) {
+        stopVoiceAndTracks();
+     }
+
+     const finalText = accumulatedTranscript.trim();
+     if (!finalText) {
+        alert("Please speak or type commands first!");
+        return;
+     }
+
      setIsProcessingVoice(true);
      try {
-       let b64Audio = "";
-       // Save audio first
-       if (audioChunksRef.current.length > 0) {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          b64Audio = await saveAudioAsBase64(audioBlob);
-       }
+        let b64Audio = "";
+        
+        // Wait a brief context frame for any trailing audio bytes
+        await new Promise(resolve => setTimeout(resolve, 310));
+        
+        if (audioChunksRef.current.length > 0) {
+           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+           b64Audio = await saveAudioAsBase64(audioBlob);
+        }
 
-       const localTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-       const logStr = `[${localTimeStr}] ${transcript}`;
 
-       const voicePromptId = "prompt_voice_auto_logs";
-       const hasVoicePrompt = state.journalPrompts.some(p => p.id === voicePromptId);
-       if (!hasVoicePrompt && onUpdateJournalPrompts) {
-          onUpdateJournalPrompts([
-             ...state.journalPrompts,
-             { id: voicePromptId, label: "Voice Auto-Logs", placeholder: "Transcribed audio clips and commands..." }
-          ]);
-       }
 
-       const sections = { ...entry.sections };
-       const prevVal = sections[voicePromptId] || "";
-       sections[voicePromptId] = prevVal ? `${prevVal}\n${logStr}` : logStr;
+        const res = await fetch('/api/omni-command', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+              text: finalText,
+              today: date,
+              stateContext: {
+                  categories: state.categories,
+                  goals: state.financeGoals?.map(g => g.title) || [],
+                  projects: state.projects?.map(p => p.title) || [],
+                  items: state.items || {},
+                  journalPrompts: state.journalPrompts || []
+              }
+           })
+        });
+        
+        if (!res.ok) throw new Error("Unified Omni Engine failed mapping actions");
+        
+        const data = await res.json();
+        
+        setOmniModal({ 
+           isOpen: true, 
+           data,
+           pendingAudio: b64Audio || undefined,
+           pendingTranscript: finalText
+        });
 
-       onSaveJournal(today, { 
-          audioLog: b64Audio || (entry as any).audioLog, 
-          sections 
-       } as any);
-
-       const res = await fetch('/api/omni-command', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-             text: transcript,
-             today: date,
-             stateContext: {
-                 categories: state.categories,
-                 goals: state.financeGoals?.map(g => g.title),
-                 projects: state.projects?.map(p => p.title),
-             }
-          })
-       });
-       
-       if (!res.ok) throw new Error("Failed to map voice");
-       
-       const data = await res.json();
-       
-       if (onOmniCommand) {
-          onOmniCommand(data);
-       }
-       
-     } catch(e) {
-        console.error(e);
-        alert("Omni Engine failed: Check server connection.");
+        setAccumulatedTranscript('');
+        
+        
+     } catch(e: any) {
+         console.error(e);
+         alert(`Omni Engine failed: ${e.message}`);
      } finally {
-        setIsProcessingVoice(false);
+         setIsProcessingVoice(false);
      }
   };
 
@@ -656,16 +726,6 @@ export const JournalView: React.FC<JournalViewProps> = ({
          </div>
       </div>
 
-      {(entry as any).audioLog && (
-        <div className="mb-6 w-full p-4 bg-[#111120] border border-[#2a2a50] rounded-xl flex flex-col gap-3">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#aa44ff] font-mono flex items-center gap-2">
-            <Mic size={12} />
-            Saved Audio Recording
-          </h3>
-          <audio controls src={(entry as any).audioLog} className="w-full h-8" />
-        </div>
-      )}
-
       {/* Main Grid: left writing desk, right metrics/reminders sidebar */}
       {viewState === 'editor' ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -755,71 +815,170 @@ export const JournalView: React.FC<JournalViewProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons: Voice Auto-Log, Image, Location, Sketch */}
-          <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 shadow-sm space-y-4 flex flex-col animate-fadeIn relative z-20">
-            <h3 className="text-[10px] font-black tracking-widest text-[#aa44ff] uppercase block font-mono border-b border-[#1e1e38] pb-2">Actions & Assets</h3>
-            <div className="flex flex-wrap gap-2 relative">
+          {/* Combined Voice, Text & Assets OmniLife Console (Inline) */}
+          <div id="omnilife-console" className="bg-[#111120] border border-[#ff00a0]/30 rounded-2xl p-5 shadow-[0_0_20px_rgba(255,0,160,0.08)] space-y-4 flex flex-col animate-fadeIn relative z-20 overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-[#ff00a0]/3 blur-3xl pointer-events-none" />
+            
+            <div className="flex items-center justify-between border-b border-[#201030] pb-2">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isVoiceRecording ? 'bg-rose-500' : 'bg-[#00d4ff]'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isVoiceRecording ? 'bg-rose-600' : 'bg-[#00d4ff]'}`}></span>
+                </span>
+                <h3 className="text-xs font-black uppercase tracking-widest text-[#00d4ff] font-mono flex items-center gap-1.5">
+                  <Zap size={13} className="text-[#00d4ff]" />
+                  OmniLife Auto-Log Console
+                </h3>
+              </div>
+              <div className="text-[10px] uppercase font-mono tracking-widest text-[#ff00a0]/70 font-bold">
+                Unified Voice & Text
+              </div>
+            </div>
+
+            {/* Input Textarea for Voice & Keyboard */}
+            <div className="relative">
+              <textarea
+                id="omnilife-textarea"
+                value={accumulatedTranscript}
+                onChange={(e) => setAccumulatedTranscript(e.target.value)}
+                placeholder={
+                  isVoiceRecording 
+                    ? "🎤 Listening closely... Speak your daily logs or edit them here..." 
+                    : "Type or speak your logs... (e.g. 'spent $25 on dinner, completed chest workout, add Win: did great')"
+                }
+                className={`w-full min-h-[140px] bg-[#070710] border rounded-xl p-4 text-xs text-slate-200 focus:outline-none transition-all duration-150 ${
+                  isVoiceRecording 
+                    ? 'border-[#ff00a0]/50 shadow-[0_0_15px_rgba(255,0,160,0.08)] bg-rose-950/5' 
+                    : 'border-[#1e1e38] focus:border-[#00d4ff]/40 focus:bg-[#090915]'
+                } font-mono leading-relaxed placeholder-slate-600`}
+              />
+              
+              {isVoiceRecording && (
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-0.5 bg-rose-500/15 border border-rose-500/30 rounded-full animate-pulse text-[9px] font-mono text-rose-400 uppercase tracking-widest font-black">
+                   <span className="w-1 h-1 rounded-full bg-rose-500 animate-ping" />
+                   Live Mic Active
+                </div>
+              )}
+            </div>
+
+            {/* Actions for Auto-Log Console */}
+            <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={toggleVoiceRecording}
-                disabled={isProcessingVoice || isAiAnalyzing}
-                className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider cursor-pointer transition disabled:opacity-50 overflow-hidden shadow-sm ${isVoiceRecording ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40 animate-pulse' : 'bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/30 hover:bg-[#ff00a0]/20 hover:shadow-[0_0_15px_rgba(255,0,160,0.2)]'}`}
-                title="Speak to journal and auto-log naturally"
+                disabled={isProcessingVoice}
+                className={`flex-1 flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer transition disabled:opacity-50 ${
+                  isVoiceRecording 
+                    ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40 animate-pulse' 
+                    : 'bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/30 hover:bg-[#ff00a0]/20'
+                }`}
               >
-                <span className="relative z-10 flex items-center gap-1.5">
-                   {isProcessingVoice ? <Loader size={14} className="animate-spin" /> : isVoiceRecording ? <Mic size={14} className="animate-pulse" /> : <MicOff size={14} />}
-                   {isProcessingVoice ? 'Processing...' : isVoiceRecording ? 'Listening...' : 'Voice & Auto-Log'}
-                </span>
+                {isProcessingVoice ? <Loader size={12} className="animate-spin" /> : isVoiceRecording ? <MicOff size={12} /> : <Mic size={12} />}
+                {isProcessingVoice ? 'Processing...' : isVoiceRecording ? 'Stop Transcribing' : 'Use Voice (Mic)'}
               </button>
+
+              <button
+                onClick={handleExecuteOmniCommand}
+                disabled={isProcessingVoice || !accumulatedTranscript.trim()}
+                className="flex-1 bg-[#00d4ff]/10 hover:bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/30 hover:border-[#00d4ff]/60 px-4 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(0,212,255,0.05)] hover:shadow-[0_0_25px_rgba(0,212,255,0.2)] cursor-pointer"
+              >
+                {isProcessingVoice ? <Loader size={12} className="animate-spin" /> : <Brain size={12} />}
+                {isProcessingVoice ? 'Processing...' : 'Execute Auto-Log'}
+              </button>
+            </div>
+
+
+
+            {/* Micro-Tips */}
+            <div className="p-3 bg-slate-900/40 border border-[#2a2a50]/30 rounded-xl text-[10px] font-mono text-slate-400 leading-relaxed space-y-1">
+               <div className="text-slate-300 font-extrabold flex items-center gap-1 text-[11px]">
+                  <Brain size={12} className="text-[#00d4ff]" />
+                  COMBINED AUDIO + KEYBOARD AUTO-LOG CAPABILITIES:
+               </div>
+               <div>
+                  • <strong className="text-[#ff00a0]">Voice Capture:</strong> Speaking records a local audio clip connected directly to today's journal!
+               </div>
+               <div>
+                  • <strong className="text-emerald-400">Habit Mapping:</strong> e.g., <em className="text-slate-300">"marked workout as done with 15 reps"</em> completes trackers.
+               </div>
+               <div>
+                  • <strong className="text-amber-400">Finance Logging:</strong> e.g., <em className="text-slate-300">"spent $15.50 on delicious lunch"</em> logs expenses instantly.
+               </div>
+               <div>
+                  • <strong className="text-[#00d4ff]">Diary Entries:</strong> Automatically parses text and logs reflections under custom headings.
+               </div>
+            </div>
+
+            {/* Other Media & Action Assets (Image Upload, GPS, Sketch Canvas, Auto-Log Text) */}
+            <div className="border-t border-[#1e1e38] pt-3 flex flex-wrap gap-2 items-center">
+              <label className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/20 rounded-lg text-[9px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#00d4ff]/20 transition select-none">
+                <ImageIcon size={11} />
+                Attach Image
+                <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+              </label>
+              
+              <div className="relative">
+                <button 
+                  onClick={() => setShowLocMenu(!showLocMenu)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#aa44ff]/10 text-[#aa44ff] border border-[#aa44ff]/20 rounded-lg text-[9px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#aa44ff]/20 transition"
+                >
+                  <MapPin size={11} />
+                  GPS Location
+                </button>
+                {showLocMenu && (
+                  <div className="absolute bottom-full left-0 mb-2 bg-[#111120] border border-[#2a2a50] rounded-xl p-2 flex flex-col gap-1 w-48 z-50 shadow-2xl animate-fadeIn">
+                    <button onClick={() => { handleCaptureGPS(); setShowLocMenu(false); }} className="text-left px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#00ff88] rounded-lg transition">Current (Locate)</button>
+                    <a href="https://maps.google.com" target="_blank" rel="noreferrer" onClick={() => setShowLocMenu(false)} className="text-left px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#00d4ff] rounded-lg transition block">Google Maps</a>
+                    <a href="https://maps.apple.com" target="_blank" rel="noreferrer" onClick={() => setShowLocMenu(false)} className="text-left px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#ffaa44] rounded-lg transition block">Apple Maps</a>
+                  </div>
+                )}
+              </div>
+
+              <button 
+                onClick={() => setShowSketch(!showSketch)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider cursor-pointer transition ${showSketch ? 'bg-amber-500 text-[#0d0d1a] font-extrabold' : 'bg-[#ffaa44]/10 text-[#ffaa44] border border-[#ffaa44]/20 hover:bg-[#ffaa44]/20'}`}
+              >
+                <Edit3 size={11} />
+                {showSketch ? 'Hide Sketch' : 'Sketch Canvas'}
+              </button>
+
               <button
                 onClick={handleAiAutoLog}
                 disabled={isAiAnalyzing || isProcessingVoice}
-                className="relative flex items-center gap-2 px-4 py-2 bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/30 rounded-xl text-[11px] font-black uppercase tracking-wider cursor-pointer hover:bg-[#00ff88]/20 transition disabled:opacity-50 overflow-hidden shadow-sm"
-                title="Extract tasks, tracker logs, and finances automatically from journal text"
+                className="relative flex items-center gap-1.5 px-3 py-1.5 bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/20 rounded-lg text-[9px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#00ff88]/20 transition disabled:opacity-50 overflow-hidden shadow-sm"
+                title="Extract trackers and finances automatically from written Reflection/Journal entries"
               >
                 {isAiAnalyzing && (
                   <div className="absolute inset-0 bg-[#00ff88]/20 transition-all duration-300" style={{ width: `${aiPercent}%` }} />
                 )}
-                <span className="relative z-10 flex items-center gap-2">
-                   {isAiAnalyzing ? <Loader size={14} className="animate-spin" /> : <Brain size={14} />}
-                   {isAiAnalyzing ? `Analyzing... ${aiPercent}%` : "Auto-Log"}
+                <span className="relative z-10 flex items-center gap-1">
+                   {isAiAnalyzing ? <Loader size={11} className="animate-spin" /> : <Brain size={11} />}
+                   {isAiAnalyzing ? `Analyzing... ${aiPercent}%` : "Auto-Log Reflection Texts"}
                 </span>
               </button>
-              <label className="flex items-center gap-2 px-3 py-2 bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/20 rounded-xl text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#00d4ff]/20 transition">
-                <ImageIcon size={14} />
-                Attach Image
-                <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-              </label>
-              <div className="relative">
-                <button 
-                  onClick={() => setShowLocMenu(!showLocMenu)}
-                  className="flex items-center gap-2 px-3 py-2 bg-[#aa44ff]/10 text-[#aa44ff] border border-[#aa44ff]/20 rounded-xl text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#aa44ff]/20 transition"
-                >
-                  <MapPin size={14} />
-                  Location
-                </button>
-                {showLocMenu && (
-                  <div className="absolute top-full left-0 mt-2 bg-[#111120] border border-[#2a2a50] rounded-xl p-2 flex flex-col gap-1 w-48 z-50 shadow-2xl">
-                    <button onClick={() => { handleCaptureGPS(); setShowLocMenu(false); }} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#00ff88] rounded-lg transition">Current (Locate)</button>
-                    <a href="https://maps.google.com" target="_blank" rel="noreferrer" onClick={() => setShowLocMenu(false)} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#00d4ff] rounded-lg transition block">Google Maps</a>
-                    <a href="https://maps.apple.com" target="_blank" rel="noreferrer" onClick={() => setShowLocMenu(false)} className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-[#1a1a30] text-[#ffaa44] rounded-lg transition block">Apple Maps</a>
-                  </div>
-                )}
-              </div>
-              <button 
-                onClick={() => setShowSketch(!showSketch)}
-                className="flex items-center gap-2 px-3 py-2 bg-[#ffaa44]/10 text-[#ffaa44] border border-[#ffaa44]/20 rounded-xl text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[#ffaa44]/20 transition"
-              >
-                <Edit3 size={14} />
-                {showSketch ? 'Hide Sketch' : 'Sketch'}
-              </button>
             </div>
-
-            {(isVoiceRecording || isProcessingVoice || accumulatedTranscript) && (
-               <div className="w-full mt-3 bg-[#ff00a0]/5 border border-[#ff00a0]/20 rounded-xl p-3 max-h-[160px] overflow-auto text-xs font-mono text-[#ff00a0] animate-fadeIn leading-relaxed">
-                  {accumulatedTranscript || (isProcessingVoice ? "Processing voice deeply..." : "Start speaking... (Click Voice & Auto-Log again to finish)")}
-               </div>
-            )}
           </div>
+
+          {/* Saved Audio Recording right below OmniLife Auto-Log Console */}
+          {(entry as any).audioLog && (
+            <div className="bg-[#111120] border border-[#ff00a0]/30 rounded-2xl p-4 shadow-[0_0_15px_rgba(255,0,160,0.05)] space-y-3 animate-fadeIn relative z-20">
+              <div className="flex items-center gap-2 border-b border-[#201030] pb-2">
+                <Mic size={14} className="text-[#ff00a0]" />
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-300 font-mono">
+                  Saved Voice Auto-Log Audio Track
+                </h3>
+              </div>
+              <div className="bg-[#070710] p-2 rounded-xl border border-[#1e1e38]">
+                <audio 
+                  controls 
+                  src={(entry as any).audioLog} 
+                  className="w-full h-9 rounded-lg opacity-90" 
+                />
+              </div>
+              <p className="text-[9px] font-mono text-slate-500 leading-relaxed">
+                // this custom recording is linked to today's active journal log for audio playback and reference
+              </p>
+            </div>
+          )}
 
           {/* Dynamic Prompts / Custom Headings */}
           <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 space-y-4">
@@ -1022,56 +1181,6 @@ export const JournalView: React.FC<JournalViewProps> = ({
       {/* Right Side: Connections Card Sidebar */}
         <div className="space-y-4">
           
-          {/* Day Review Snapshot */}
-          <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 shadow-sm">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-3.5 border-b border-[#1e1e38] pb-3 font-mono">
-              <Award size={14} className="text-emerald-400" />
-              Day Progress Snapshot
-            </h3>
-
-            <div className="grid grid-cols-2 gap-2 text-center">
-              <div 
-                className="bg-[#0d0d1a]/60 border border-[#1e1e38] p-3 rounded-xl cursor-pointer hover:border-emerald-600 transition"
-                onClick={() => onNavigate('daily')}
-              >
-                <p className="text-xl font-extrabold text-emerald-450 text-emerald-400 font-display">{dailyProgress.pct}%</p>
-                <p className="text-[8.5px] text-slate-500 uppercase tracking-widest font-bold mt-1">score complete</p>
-              </div>
-              <div className="bg-[#0d0d1a]/60 border border-[#1e1e38] p-3 rounded-xl">
-                <p className="text-xl font-extrabold text-indigo-455 text-indigo-450 font-display">{dailyProgress.hrs.toFixed(1)}h</p>
-                <p className="text-[8.5px] text-slate-500 uppercase tracking-widest font-bold mt-1">hours logged</p>
-              </div>
-              <div className="bg-[#0d0d1a]/60 border border-[#1e1e38] p-3 rounded-xl col-span-2 flex items-center justify-between px-3.5">
-                <span className="text-[8.5px] text-slate-500 font-bold uppercase tracking-wider font-mono">Tracker items:</span>
-                <span className="text-xs font-bold text-slate-200">{dailyProgress.done} of {dailyProgress.total} checks</span>
-              </div>
-            </div>
-
-            {/* Compiled Tracker Notes */}
-            <div className="mt-4 pt-3 border-t border-[#1e1e38]">
-              <h4 className="text-[9px] font-black tracking-widest text-[#00d4ff] uppercase font-mono mb-2">Automated Tracker Data</h4>
-              <div className="space-y-1.5 max-h-[160px] overflow-y-auto scrollbar-none">
-                {Object.entries(state.daily[today] || {}).flatMap(([cat, items]) => 
-                  Object.entries(items).map(([itm, data]) => {
-                    if (data.notes || data.deepData) {
-                      return (
-                        <div key={`${cat}-${itm}`} className="bg-[#0d0d1a] px-2 py-1.5 rounded-lg border border-[#2a2a50]">
-                          <span className="text-[9px] font-bold text-slate-400 block mb-0.5">{itm}</span>
-                          {data.notes && <p className="text-[10px] text-slate-300">"{data.notes}"</p>}
-                          {data.deepData && <p className="text-[9px] text-[#ff6b1a] font-mono mt-0.5">&gt; {data.deepData}</p>}
-                        </div>
-                      );
-                    }
-                    return null;
-                  }).filter(Boolean)
-                )}
-                {Object.keys(state.daily[today] || {}).length === 0 && (
-                  <p className="text-[10px] text-slate-600 font-mono italic">No notes linked from tracker today.</p>
-                )}
-              </div>
-            </div>
-          </div>
-
           {/* Tags Widget */}
           <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 shadow-sm">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-3.5 border-b border-[#1e1e38] pb-3 font-mono">
@@ -1191,11 +1300,11 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
             <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1 scrollbar-none">
               {dayReminders.length > 0 ? (
-                dayReminders.map(rem => {
+                dayReminders.map((rem, index) => {
                   const isDone = rem.status === 'done';
                   return (
                     <div 
-                      key={rem.id}
+                      key={`${rem.id}-${index}`}
                       className="flex items-center gap-2.5 bg-[#0d0d1a]/80 p-2.5 rounded-xl border border-[#1e1e38] justify-between font-sans"
                     >
                       <button 
@@ -1233,6 +1342,57 @@ export const JournalView: React.FC<JournalViewProps> = ({
               )}
             </div>
           </div>
+
+          {/* Day Review Snapshot */}
+          <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 shadow-sm">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-3.5 border-b border-[#1e1e38] pb-3 font-mono">
+              <Award size={14} className="text-emerald-400" />
+              Day Progress Snapshot
+            </h3>
+
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div 
+                className="bg-[#0d0d1a]/60 border border-[#1e1e38] p-3 rounded-xl cursor-pointer hover:border-emerald-600 transition"
+                onClick={() => onNavigate('daily')}
+              >
+                <p className="text-xl font-extrabold text-emerald-450 text-emerald-400 font-display">{dailyProgress.pct}%</p>
+                <p className="text-[8.5px] text-slate-500 uppercase tracking-widest font-bold mt-1">score complete</p>
+              </div>
+              <div className="bg-[#0d0d1a]/60 border border-[#1e1e38] p-3 rounded-xl">
+                <p className="text-xl font-extrabold text-indigo-455 text-indigo-450 font-display">{dailyProgress.hrs.toFixed(1)}h</p>
+                <p className="text-[8.5px] text-slate-500 uppercase tracking-widest font-bold mt-1">hours logged</p>
+              </div>
+              <div className="bg-[#0d0d1a]/60 border border-[#1e1e38] p-3 rounded-xl col-span-2 flex items-center justify-between px-3.5">
+                <span className="text-[8.5px] text-slate-500 font-bold uppercase tracking-wider font-mono">Tracker items:</span>
+                <span className="text-xs font-bold text-slate-200">{dailyProgress.done} of {dailyProgress.total} checks</span>
+              </div>
+            </div>
+
+            {/* Compiled Tracker Notes */}
+            <div className="mt-4 pt-3 border-t border-[#1e1e38]">
+              <h4 className="text-[9px] font-black tracking-widest text-[#00d4ff] uppercase font-mono mb-2">Automated Tracker Data</h4>
+              <div className="space-y-1.5 max-h-[160px] overflow-y-auto scrollbar-none">
+                {Object.entries(state.daily[today] || {}).flatMap(([cat, items]) => 
+                  Object.entries(items).map(([itm, data]) => {
+                    if (data.notes || data.deepData) {
+                      return (
+                        <div key={`${cat}-${itm}`} className="bg-[#0d0d1a] px-2 py-1.5 rounded-lg border border-[#2a2a50]">
+                          <span className="text-[9px] font-bold text-slate-400 block mb-0.5">{itm}</span>
+                          {data.notes && <p className="text-[10px] text-slate-300">"{data.notes}"</p>}
+                          {data.deepData && <p className="text-[9px] text-[#ff6b1a] font-mono mt-0.5">&gt; {data.deepData}</p>}
+                        </div>
+                      );
+                    }
+                    return null;
+                  }).filter(Boolean)
+                )}
+                {Object.keys(state.daily[today] || {}).length === 0 && (
+                  <p className="text-[10px] text-slate-600 font-mono italic">No notes linked from tracker today.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
         </div>
         </div>
       ) : (
@@ -1666,12 +1826,21 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 OMNILIFE LOG DECK
               </h2>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Review the {omniModal.data.mutations?.length || 0} system actions interpreted from your voice or text log. Edit or discard any inaccuracies before executing.
+                Review and customize the {omniModal.data.mutations?.length || 0} system actions interpreted from your voice or text log. Edit or discard any inaccuracies before executing.
               </p>
             </div>
             
             <div className="max-h-[420px] overflow-y-auto space-y-3 mb-6 pr-1 scrollbar-none">
               {(omniModal.data.mutations || []).map((mut: any, i: number) => {
+                const isGoal = mut.type === "CREATE_GOAL";
+                const isLogTracker = mut.type === "LOG_TRACKER";
+                const isEditTracker = mut.type === "EDIT_TRACKER";
+                const isSetTrackerGoal = mut.type === "SET_TRACKER_GOAL";
+                const isReminder = mut.type === "CREATE_REMINDER";
+                const isFinance = mut.type === "LOG_FINANCE";
+                const isAppendJournal = mut.type === "APPEND_JOURNAL";
+                const isJournalMetrics = mut.type === "UPDATE_JOURNAL_METRICS";
+
                 return (
                   <div key={i} className="p-4 bg-[#0d0d1a] border border-[#1e1e38] rounded-xl relative space-y-2">
                     <button
@@ -1688,35 +1857,433 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     </button>
                     
                     <div className="flex items-center gap-1.5 mb-2">
-                       <span className="bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/30 text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">
+                       <span className="bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/30 text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full font-mono">
                          {mut.type.replace(/_/g, ' ')}
                        </span>
                     </div>
 
-                    <div className="text-xs text-slate-300 font-mono">
-                      {Object.keys(mut.payload).map(k => {
-                         if (k === 'id') return null;
-                         return (
-                           <div key={k} className="flex flex-col sm:flex-row sm:gap-2 mb-1.5 border-b border-[#1e1e38]/50 pb-1">
-                             <span className="text-slate-500 w-24 shrink-0 uppercase tracking-wider text-[9px] font-bold py-1">{k}</span>
-                             <input
-                               type="text"
-                               value={typeof mut.payload[k] === 'object' ? JSON.stringify(mut.payload[k]) : mut.payload[k] || ''}
-                               onChange={(e) => {
-                                  const nextMuts = [...omniModal.data.mutations];
-                                  nextMuts[i].payload[k] = e.target.value;
-                                  setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
-                               }}
-                               className="flex-1 bg-transparent border-none focus:outline-none focus:bg-[#111120] text-slate-200 px-1 py-0.5 rounded"
-                             />
-                           </div>
-                         );
-                      })}
+                    <div className="text-xs text-slate-300 font-mono space-y-3 pt-2">
+                      {/* CREATE_GOAL */}
+                      {isGoal && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Goal Title</label>
+                            <input
+                              type="text"
+                              value={mut.payload.title || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.title = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Target Amount ($)</label>
+                            <input
+                              type="number"
+                              value={mut.payload.targetAmount || 0}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.targetAmount = Number(e.target.value);
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Deadline</label>
+                            <input
+                              type="date"
+                              value={mut.payload.deadline || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.deadline = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* LOG_TRACKER */}
+                      {isLogTracker && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Category</label>
+                            <select
+                              value={mut.payload.categoryId || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.categoryId = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            >
+                              <option value="">-- Category --</option>
+                              {state.categories?.map((cat: any) => (
+                                <option key={cat.id} value={cat.id}>{cat.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Item Name</label>
+                            <input
+                              type="text"
+                              value={mut.payload.item || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.item = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Status</label>
+                            <select
+                              value={mut.payload.status || 'done'}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.status = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            >
+                              <option value="done">Done</option>
+                              <option value="missed">Missed</option>
+                              <option value="skipped">Skipped</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Notes</label>
+                            <input
+                              type="text"
+                              value={mut.payload.notes || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.notes = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* EDIT_TRACKER */}
+                      {isEditTracker && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Habit Name</label>
+                            <input
+                              type="text"
+                              value={mut.payload.item || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.item = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Target Field</label>
+                            <select
+                              value={mut.payload.targetField || 'reps'}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.targetField = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            >
+                              <option value="reps">Reps (Count)</option>
+                              <option value="hours">Hours (Duration)</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Value</label>
+                            <input
+                              type="number"
+                              value={mut.payload.value || 0}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.value = Number(e.target.value);
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SET_TRACKER_GOAL */}
+                      {isSetTrackerGoal && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Habit Name</label>
+                            <input
+                              type="text"
+                              value={mut.payload.item || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.item = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Target Field</label>
+                            <select
+                              value={mut.payload.targetField || 'reps'}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.targetField = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            >
+                              <option value="reps">Reps (Count)</option>
+                              <option value="hours">Hours (Duration)</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Goal Target Value</label>
+                            <input
+                              type="number"
+                              value={mut.payload.value || 0}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.value = Number(e.target.value);
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* CREATE_REMINDER */}
+                      {isReminder && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Reminder Title</label>
+                            <input
+                              type="text"
+                              value={mut.payload.title || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.title = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Priority</label>
+                            <select
+                              value={mut.payload.priority || 'medium'}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.priority = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            >
+                              <option value="high">🔥 High</option>
+                              <option value="medium">⚡ Medium</option>
+                              <option value="low">💤 Low</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Due Date</label>
+                            <input
+                              type="date"
+                              value={mut.payload.dueDate || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.dueDate = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* LOG_FINANCE */}
+                      {isFinance && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Concept / Detail</label>
+                            <input
+                              type="text"
+                              value={mut.payload.concept || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.concept = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Transaction Type</label>
+                            <select
+                              value={mut.payload.type || 'expense'}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.type = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            >
+                              <option value="expense">Expense (Out)</option>
+                              <option value="income">Income (In)</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Amount ($)</label>
+                            <input
+                              type="number"
+                              value={mut.payload.amount || 0}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.amount = Number(e.target.value);
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* APPEND_JOURNAL */}
+                      {isAppendJournal && (
+                        <div className="grid grid-cols-1 gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Journal Box Heading (Topic)</label>
+                            <input
+                              type="text"
+                              value={mut.payload.topic || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.topic = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full font-mono text-xs text-[#00d4ff]"
+                              placeholder="e.g. Wins & Highlights, Free Notes, Daily Reflection, or custom heading"
+                            />
+                            <p className="text-[8px] text-slate-500">Your spoken text will be smart recorded under this heading. Customize the label here if desired!</p>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Journal Entry Text</label>
+                            <textarea
+                              value={mut.payload.text || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.text = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="w-full min-h-[70px] bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0]"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* UPDATE_JOURNAL_METRICS */}
+                      {isJournalMetrics && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Mood Scale (1-5)</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="5"
+                              value={mut.payload.mood || 5}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.mood = Number(e.target.value);
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Energy Scale (1-5)</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="5"
+                              value={mut.payload.energy || 5}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.energy = Number(e.target.value);
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Fallback for other mutations */}
+                      {!isGoal && !isLogTracker && !isEditTracker && !isSetTrackerGoal && !isReminder && !isFinance && !isAppendJournal && !isJournalMetrics && (
+                        <div>
+                          {Object.keys(mut.payload).map(k => {
+                             if (k === 'id') return null;
+                             return (
+                               <div key={k} className="flex flex-col sm:flex-row sm:gap-2 mb-1.5 border-b border-[#1e1e38]/50 pb-1">
+                                 <span className="text-slate-500 w-24 shrink-0 uppercase tracking-wider text-[9px] font-bold py-1">{k}</span>
+                                 <input
+                                   type="text"
+                                   value={typeof mut.payload[k] === 'object' ? JSON.stringify(mut.payload[k]) : mut.payload[k] || ''}
+                                   onChange={(e) => {
+                                      const nextMuts = [...omniModal.data.mutations];
+                                      nextMuts[i].payload[k] = e.target.value;
+                                      setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                                   }}
+                                   className="flex-1 bg-transparent border-none focus:outline-none focus:bg-[#111120] text-slate-200 px-1 py-0.5 w-full"
+                                 />
+                               </div>
+                             );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
-              {(!omniModal.data.mutations || omniModal.data.mutations.length === 0) && (
+              {omniModal.pendingTranscript && (
+                <div className="p-4 bg-[#0a2030]/40 border border-[#00d4ff]/30 rounded-xl space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/30 text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full font-mono">
+                      🎙️ VOICE JOURNAL LOG
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-300 font-mono space-y-2">
+                    <p className="text-[10px] text-slate-400">
+                      Audio and transcription text will be recorded under your "Voice Auto-Logs" journal section:
+                    </p>
+                    <textarea
+                      value={omniModal.pendingTranscript}
+                      onChange={(e) => {
+                        setOmniModal({
+                          ...omniModal,
+                          pendingTranscript: e.target.value
+                        });
+                      }}
+                      className="w-full min-h-[70px] bg-[#070710] border border-[#1e1e38] rounded-lg p-2 text-[11px] text-slate-200 focus:outline-none focus:border-[#00d4ff]/40 font-mono leading-relaxed"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(!omniModal.data.mutations || omniModal.data.mutations.length === 0) && !omniModal.pendingTranscript && (
                  <div className="p-8 text-center text-slate-500 font-mono text-xs border border-dashed border-[#2a2a50] rounded-xl flex flex-col gap-2 items-center">
                     No executable actions parsed.
                     <button onClick={() => setOmniModal({ isOpen: false, data: null })} className="bg-slate-800 px-3 py-1 rounded text-white mt-2">Close Matrix</button>
@@ -1724,11 +2291,15 @@ export const JournalView: React.FC<JournalViewProps> = ({
               )}
             </div>
 
-            {omniModal.data.mutations?.length > 0 && (
+            {(omniModal.data.mutations?.length > 0 || omniModal.pendingAudio || omniModal.pendingTranscript) && (
               <button
                 onClick={() => {
                   if (onOmniCommand) {
-                     onOmniCommand(omniModal.data);
+                     onOmniCommand({
+                        ...omniModal.data,
+                        pendingAudio: omniModal.pendingAudio,
+                        pendingTranscript: omniModal.pendingTranscript
+                     });
                   }
                   setOmniModal({ isOpen: false, data: null });
                 }}
@@ -1740,112 +2311,40 @@ export const JournalView: React.FC<JournalViewProps> = ({
           </div>
         </div>
       )}
-      {/* OMNI INPUT MODAL (VOICE & TEXT) */}
-      {omniInputModal.isOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md overflow-y-auto">
-          <div className="bg-[#111120] border border-[#00d4ff]/30 rounded-3xl p-8 w-full max-w-2xl shadow-[0_0_50px_rgba(0,212,255,0.15)] relative my-8 animate-fadeIn">
-            <button 
-              onClick={() => {
-                if (isVoiceRecording) toggleVoiceRecording();
-                setOmniInputModal({ isOpen: false, mode: 'text', tempText: '' });
-              }}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-            >
-              <X size={20} />
-            </button>
-            
-            <div className="mb-6">
-              <h2 className="text-2xl font-black text-white font-display flex items-center gap-2 uppercase tracking-wide">
-                <Zap size={24} className="text-[#00d4ff]" />
-                OmniLife Context Engine
-              </h2>
-              {omniInputModal.mode === 'voice' ? (
-                 <p className="text-sm text-slate-300 mt-2 font-semibold leading-relaxed border-l-2 border-[#00d4ff] pl-3">
-                   <strong className="text-[#00d4ff]">Continuous Voice & Auto-Log:</strong> Speak naturally about your day, expenses, habits, or reminders. The AI will parse your speech, append to your journal, check off habits, and log finances simultaneously. 
-                 </p>
-              ) : (
-                 <p className="text-sm text-slate-300 mt-2 font-semibold leading-relaxed border-l-2 border-[#00d4ff] pl-3">
-                   <strong className="text-[#00d4ff]">Text Auto-Log:</strong> Type informally about your day, expenses, habits, or reminders. We will dynamically log and configure everything across your operating system.
-                 </p>
-              )}
-            </div>
-            
-            <div className="space-y-6">
-              <div className="relative">
-                <textarea
-                  value={omniInputModal.mode === 'text' ? omniInputModal.tempText : (accumulatedTranscript || '')}
-                  onChange={(e) => setOmniInputModal(prev => ({ ...prev, tempText: e.target.value }))}
-                  readOnly={omniInputModal.mode === 'voice'}
-                  placeholder={omniInputModal.mode === 'voice' ? (isVoiceRecording ? "Listening closely..." : "Click the mic below to start speaking.") : "Type your journal entry, tasks, expenses, or thoughts here..."}
-                  className={`w-full min-h-[200px] bg-[#070710] border rounded-2xl p-5 text-sm text-slate-200 focus:outline-none transition-colors ${omniInputModal.mode === 'voice' && isVoiceRecording ? 'border-[#ff00a0]/60 shadow-[0_0_20px_rgba(255,0,160,0.1)]' : 'border-[#1e1e38] focus:border-[#00d4ff]/50'} font-mono leading-relaxed placeholder-slate-600`}
-                />
-              </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-                {omniInputModal.mode === 'voice' ? (
-                   <button
-                     onClick={toggleVoiceRecording}
-                     disabled={isProcessingVoice}
-                     className={`flex-1 w-full relative flex justify-center items-center gap-3 px-6 py-4 rounded-xl text-sm font-black uppercase tracking-widest cursor-pointer transition disabled:opacity-50 overflow-hidden shadow-sm ${isVoiceRecording ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40 animate-pulse' : 'bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/30 hover:bg-[#ff00a0]/20 hover:shadow-[0_0_20px_rgba(255,0,160,0.2)]'}`}
-                   >
-                     {isProcessingVoice ? <Loader size={20} className="animate-spin" /> : isVoiceRecording ? <Mic size={20} className="animate-pulse" /> : <MicOff size={20} />}
-                     {isProcessingVoice ? 'Processing...' : isVoiceRecording ? 'Stop & Parse Actions' : 'Start Voice Engine'}
-                   </button>
-                ) : (
-                   <button
-                     onClick={async () => {
-                        const txt = omniInputModal.tempText.trim();
-                        if (!txt) return;
-                        setIsProcessingVoice(true);
-                        try {
-                           const res = await fetch('/api/omni-command', {
-                             method: 'POST',
-                             headers: { 'Content-Type': 'application/json' },
-                             body: JSON.stringify({
-                                text: txt,
-                                today: date,
-                                stateContext: {
-                                    categories: state.categories,
-                                    goals: state.financeGoals?.map(g => g.title),
-                                    projects: state.projects?.map(p => p.title),
-                                }
-                             })
-                           });
-                           if (!res.ok) throw new Error("Failed to map text");
-                           const data = await res.json();
-                           if (onOmniCommand) {
-                              onOmniCommand(data);
-                           }
-                           setOmniInputModal({ isOpen: false, mode: 'text', tempText: '' });
-                        } catch (e) {
-                           console.error(e);
-                           alert("Omni Engine failed: Check server connection.");
-                        } finally {
-                           setIsProcessingVoice(false);
-                        }
-                     }}
-                     disabled={isProcessingVoice || !omniInputModal.tempText.trim()}
-                     className="flex-1 w-full bg-[#00d4ff]/10 hover:bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/30 hover:border-[#00d4ff]/60 px-6 py-4 rounded-xl text-sm font-black tracking-widest uppercase transition disabled:opacity-50 flex items-center justify-center gap-3 shadow-[0_0_15px_rgba(0,212,255,0.1)] hover:shadow-[0_0_25px_rgba(0,212,255,0.25)]"
-                   >
-                     {isProcessingVoice ? <Loader size={20} className="animate-spin" /> : <Brain size={20} />}
-                     {isProcessingVoice ? 'Analyzing Context...' : 'Execute Text Auto-Log'}
-                   </button>
-                )}
-                
-                <button 
-                  onClick={() => {
-                     setOmniInputModal(prev => ({ ...prev, mode: prev.mode === 'voice' ? 'text' : 'voice' }));
-                  }}
-                  className="px-6 py-4 bg-[#1e1e38] hover:bg-[#2a2a50] text-slate-300 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition cursor-pointer"
+      {/* CUSTOM ALERT MODAL OVERLAY */}
+      {alertModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#111120] border border-rose-500/40 rounded-2xl p-6 w-full max-w-md shadow-[0_0_50px_rgba(244,63,94,0.15)] relative">
+            <button 
+              onClick={() => setAlertModal(null)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+            >
+              <X size={16} />
+            </button>
+            <div className="text-center space-y-4">
+              <div className="mx-auto w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 text-xl font-bold animate-pulse">
+                ⚠️
+              </div>
+              <h3 className="text-base font-black text-white font-display tracking-wider uppercase">
+                {alertModal.title}
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed font-mono text-left whitespace-pre-wrap bg-[#080811] p-3.5 rounded-xl border border-[#1e1e38]">
+                {alertModal.message}
+              </p>
+              <div className="pt-2">
+                <button
+                  onClick={() => setAlertModal(null)}
+                  className="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600/35 text-rose-400 border border-rose-500/40 rounded-xl text-xs font-black uppercase tracking-widest transition cursor-pointer"
                 >
-                  {omniInputModal.mode === 'voice' ? <FileText size={16} /> : <Mic size={16} />}
-                  Switch to {omniInputModal.mode === 'voice' ? 'Text' : 'Voice'}
+                  Dismiss Notice
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 };

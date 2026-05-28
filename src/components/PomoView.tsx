@@ -70,6 +70,7 @@ export const PomoView: React.FC<PomoViewProps> = ({
   const [quickTaskCat, setQuickTaskCat] =
     React.useState<TrackerCategory>("custom");
   const [savePermanently, setSavePermanently] = React.useState(true);
+  const [showChecklist, setShowChecklist] = React.useState(false);
 
   const today = todayStr();
 
@@ -243,13 +244,71 @@ export const PomoView: React.FC<PomoViewProps> = ({
                 </label>
 
                 <div className="border-t border-[#1e1e38] my-1 pt-2 w-full text-center">
-                  <span className="text-slate-600 font-mono text-[8px] uppercase tracking-widest">// OR DEEP LINK ROOT:</span>
+                  <span className="text-slate-600 font-mono text-[8.5px] uppercase tracking-widest">// OR SELECT DIRECTLY:</span>
                   <button
-                    onClick={() => onNavigate("daily")}
-                    className="w-full mt-1 px-3 py-1.5 bg-[#ff6b1a]/10 hover:bg-[#ff6b1a]/20 border border-[#ff6b1a]/30 text-[#ff6b1a] text-[10px] uppercase font-extrabold tracking-widest rounded-lg transition cursor-pointer font-mono"
+                    type="button"
+                    onClick={() => setShowChecklist(!showChecklist)}
+                    className="w-full mt-1 px-3 py-1.5 bg-[#ff6b1a]/10 hover:bg-[#ff6b1a]/20 border border-[#ff6b1a]/30 text-[#ff6b1a] text-[10px] uppercase font-extrabold tracking-widest rounded-lg transition cursor-pointer font-mono flex items-center justify-center gap-1.5"
                   >
-                    📋 SELECT FROM DAILY CHECKLIST
+                    <span>📋 {showChecklist ? "HIDE DAILY CHECKLIST" : "SELECT FROM DAILY CHECKLIST"}</span>
                   </button>
+                  
+                  {showChecklist && (
+                    <div className="mt-3 text-left bg-[#080811] border border-[#2a2a50] rounded-lg p-3 max-h-[220px] overflow-y-auto scrollbar-thin text-xs">
+                      <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-[#1e1e38]">
+                        <span className="text-[9px] font-mono uppercase text-slate-400 tracking-wider">Choose helper:</span>
+                        <button 
+                          type="button"
+                          onClick={() => onNavigate("daily")}
+                          className="text-[8px] font-mono uppercase bg-[#1e1e38] text-amber-400 px-1.5 py-0.5 rounded hover:bg-[#2c2c54] cursor-pointer"
+                        >
+                          Manage Checklist ↗
+                        </button>
+                      </div>
+                      
+                      {(() => {
+                        const categories: TrackerCategory[] = ["studies", "habits", "leisure", "custom"];
+                        const hasItems = categories.some(cat => (state.items?.[cat]?.length || 0) > 0);
+                        
+                        if (!hasItems) {
+                          return (
+                            <p className="text-[10px] text-slate-500 text-center py-2 italic font-mono">
+                              No items in daily checklist.
+                            </p>
+                          );
+                        }
+                        
+                        return categories.map(cat => {
+                          const catItems = state.items?.[cat] || [];
+                          if (catItems.length === 0) return null;
+                          const catLabel = state.categoryLabels?.[cat] || cat.charAt(0).toUpperCase() + cat.slice(1);
+                          return (
+                            <div key={cat} className="mb-2.5 last:mb-0">
+                              <span className="text-[8.5px] font-black uppercase tracking-widest text-[#00ff88] block mb-1">
+                                {catLabel}
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {catItems.map((itm) => (
+                                  <button
+                                    key={itm}
+                                    type="button"
+                                    onClick={() => {
+                                      onSetPomoTask(itm, cat, false);
+                                      setShowChecklist(false);
+                                    }}
+                                    className="px-2 py-1 bg-[#111120] hover:bg-[#1a1a35] border border-[#2a2a50] hover:border-[#00d4ff] text-slate-300 rounded text-[10px] transition text-left truncate max-w-full duration-150 cursor-pointer"
+                                    title={itm}
+                                  >
+                                    {itm}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -5,95 +5,97 @@ function createDemoData(): AppState {
   const state: AppState = defData();
 
   state.profile = {
-    name: "Demo Explorer",
-    tagline: "Consistent Achiever",
+    name: "Dr. Demo Explorer",
+    tagline: "Director of Product & Research",
     email: "hello@example.com",
-    dailyBudgetLimit: 50,
-    dailyIncomeTarget: 300,
+    dailyBudgetLimit: 120,
+    dailyIncomeTarget: 800,
   };
 
   state.items = {
     studies: [
-      "Deep Learning",
-      "System Design",
-      "Algorithm Analysis",
-      "Neuroscience",
+      "Advanced NLP Algorithms",
+      "Large Language Models Architecture",
+      "System Design for Scale",
+      "Neuroscience & Flow States",
     ],
     habits: [
-      "Morning Run",
-      "Meditation",
-      "Weight Lifting",
-      "Reading",
-      "Drink 3L Water",
+      "Morning Run (5k)",
+      "Vipassana Meditation",
+      "Weight Lifting (Push/Pull)",
+      "Read Research Papers",
+      "Drink 4L Water",
+      "Evening Gratitude Journal"
     ],
-    leisure: ["Guitar", "Video Games", "Netflix"],
-    custom: ["Client Proposals", "Code Review", "Server Maintenance"],
+    leisure: ["Guitar Practice", "Indie Game Dev", "Cinematography"],
+    custom: ["Strategic Planning", "Client Proposals", "Code Review (PRs)", "Server Maintenance"],
   };
 
   state.repsTarget = {
     studies: {
-      "Deep Learning": 1,
-      "System Design": 1,
-      "Algorithm Analysis": 1,
+      "Advanced NLP Algorithms": 1,
+      "System Design for Scale": 1,
+      "Neuroscience & Flow States": 1,
     },
     habits: {
-      "Morning Run": 1,
-      Meditation: 2,
-      Reading: 1,
-      "Drink 3L Water": 3,
+      "Morning Run (5k)": 1,
+      "Vipassana Meditation": 2,
+      "Read Research Papers": 1,
+      "Drink 4L Water": 4,
+      "Evening Gratitude Journal": 1
     },
-    custom: { "Client Proposals": 1, "Code Review": 2 },
+    custom: { "Client Proposals": 2, "Code Review (PRs)": 3, "Strategic Planning": 1 },
   };
 
   state.hoursTarget = {
-    studies: { "Deep Learning": 2.0, "System Design": 1.5 },
-    habits: { Reading: 1.0, "Weight Lifting": 1.5 },
-    custom: { "Client Proposals": 3.0, "Code Review": 2.0 },
+    studies: { "Advanced NLP Algorithms": 2.5, "System Design for Scale": 1.5, "Large Language Models Architecture": 2.0 },
+    habits: { "Read Research Papers": 1.5, "Weight Lifting (Push/Pull)": 1.5 },
+    custom: { "Client Proposals": 3.0, "Code Review (PRs)": 2.0, "Strategic Planning": 1.0 },
   };
 
   state.reminders = [
     {
       id: "1",
-      title: "Submit Systems design doc",
+      title: "Submit Autonomous Agent Research Doc",
       dueDate: "2026-06-01",
       time: "12:00",
       type: "deadline",
       priority: "high",
       repeat: "none",
-      notes: "",
+      notes: "Ensure sections on parallel agent execution are complete.",
       status: "pending",
     },
     {
       id: "2",
-      title: "Schedule meeting with mentor",
+      title: "Weekly sync with Engineering Leadership",
       dueDate: "2026-05-24",
-      time: "",
+      time: "10:30",
       type: "routine",
       priority: "medium",
-      repeat: "none",
-      notes: "",
+      repeat: "weekly",
+      notes: "Discuss Q3 OKRs and hiring pipeline.",
       status: "pending",
     },
     {
       id: "3",
-      title: "Trip Starts: Mountain Hike",
+      title: "Expedition Starts: Alps Retreat",
       dueDate: "2026-06-15",
-      time: "",
+      time: "08:00",
       type: "Trip Deadline",
       priority: "high",
       repeat: "none",
-      notes: "",
+      notes: "Flight leaves from Terminal 2",
       status: "pending",
     },
     {
       id: "4",
-      title: "Finance: Hosting Subscription ($45)",
+      title: "Auto-Log: Cloud GPU Subscription ($450)",
       dueDate: "2026-06-23",
-      time: "",
+      time: "09:00",
       type: "finance",
-      priority: "medium",
-      repeat: "none",
-      notes: "Recurring for amount: 45 - expense",
+      priority: "high",
+      repeat: "monthly",
+      notes: "Recurring for amount: 450 - expense",
       status: "pending",
     },
   ];

@@ -311,48 +311,24 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
               </div>
             </div>
 
-            {/* Theme engines */}
+            {/* Theme Engines */}
             <div className="space-y-2 p-1">
               <span className="text-[9px] text-[#aa44ff] block tracking-wider font-extrabold uppercase font-mono">
-                Visual Modes (22 Theme Engines)
+                Visual Modes
               </span>
-              <div className="flex flex-wrap gap-1 max-h-[85px] overflow-y-auto pr-1">
-                {(() => {
-                  const allThemes = [
-                    { id: "midnight", label: "Default Modern (Dark)" },
-                    { id: "superhero", label: "Cyber Avenger (Superhero)" },
-                    { id: "teens", label: "Vapor Violet (Gen Z)" },
-                    { id: "swiss", label: "Swiss Mono (High-Contrast)" },
-                    { id: "retro", label: "Pop Art Retro (Light)" },
-                    { id: "minimal", label: "Minimal Light (Light)" },
-                    { id: "cute", label: "Soft Pastel (Light)" },
-                    { id: "playful", label: "Vibrant Joy (Light)" },
-                    { id: "crimson", label: "Crimson Void (Dark)" },
-                    { id: "hacker", label: "Terminal Hacker (Dark)" },
-                    { id: "forest", label: "Redwood Canopy (Forest)" },
-                    { id: "luxury", label: "Imperial Velvet (Luxury)" },
-                    { id: "cyberpunk", label: "Chrome Synth (Cyberpunk)" },
-                    { id: "milkyway", label: "Cosmic Nebula (Milkyway)" },
-                    { id: "ocean", label: "Bioluminescent (Ocean)" },
-                    { id: "cars", label: "F1 Grand Prix (Cars)" },
-                    { id: "sports", label: "Stadium Turf (Sports)" },
-                    { id: "wildwest", label: "Dusty Saloon (Old West)" },
-                    { id: "futuristic", label: "Utopian Glass (Futuristic)" },
-                    { id: "proper3d", label: "Raised Neumorphism (3D)" },
-                    { id: "proper2d", label: "Comic Dot Pop-Art (2D)" },
-                    { id: "mafia", label: "La Famiglia Noir (Mafia)" },
-                  ];
-                  return allThemes.map((bg) => (
-                    <div
-                      key={bg.id}
-                      onClick={() => onSetBgTheme(bg.id)}
-                      className={`px-2 py-1 text-[8px] font-bold rounded cursor-pointer border transition ${state.bgTheme === bg.id || (!state.bgTheme && bg.id === "midnight") ? "border-[#ff6b1a] text-[#ff6b1a] bg-[#ff6b1a]/5" : "border-[#2a2a50] text-slate-400 hover:text-slate-200"}`}
-                      title={bg.label}
-                    >
-                      {bg.label.replace(/ \(.+\)/, '')}
-                    </div>
-                  ));
-                })()}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onSetBgTheme("midnight")}
+                  className={`px-3 py-1 text-[10px] font-bold rounded cursor-pointer border transition ${state.bgTheme === "midnight" || !state.bgTheme ? "border-[#ff6b1a] text-[#ff6b1a] bg-[#ff6b1a]/5" : "border-[#2a2a50] text-slate-400 hover:text-slate-200"}`}
+                >
+                  Dark Mode
+                </button>
+                <button
+                  onClick={() => onSetBgTheme("draft")}
+                  className={`px-3 py-1 text-[10px] font-bold rounded cursor-pointer border transition ${state.bgTheme === "draft" ? "border-[#ff6b1a] text-[#ff6b1a] bg-[#ff6b1a]/5" : "border-[#2a2a50] text-slate-400 hover:text-slate-200"}`}
+                >
+                  Light Mode
+                </button>
               </div>
             </div>
 

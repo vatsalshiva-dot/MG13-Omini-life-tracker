@@ -146,19 +146,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     e.target.value = ''; // Reset
   };
 
-  const handleRequestNotifications = async () => {
-    if (!("Notification" in window)) {
-      alert("This browser does not support desktop notification");
-      return;
-    }
-    const perm = await Notification.requestPermission();
-    if (perm === "granted") {
-      alert("Notifications enabled! You will now receive background alerts for timers and reminders.");
-    } else {
-      alert("Notification permission denied or dismissed.");
-    }
-  };
-
   const catColors: Record<string, string> = {
     studies: '#00d4ff',
     habits: '#00ff88',
@@ -364,13 +351,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   onChange={handleFileUpload} 
                 />
               </label>
-
-              <button 
-                onClick={handleRequestNotifications}
-                className="px-4 py-1.5 border border-purple-500/40 text-purple-400 hover:bg-purple-500/10 rounded-lg text-xs font-bold whitespace-nowrap"
-              >
-                ENABLE NATIVE ALERTS
-              </button>
 
               <button 
                 onClick={onResetAll}

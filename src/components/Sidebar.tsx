@@ -112,6 +112,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       section: "OVERVIEW",
     },
     {
+      id: "calendar",
+      label: "Calendar View",
+      icon: <Calendar size={14} />,
+      section: "OVERVIEW",
+    },
+    {
       id: "journal",
       label: "Journal & Reflections",
       icon: <BookOpen size={14} />,
@@ -157,12 +163,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: "analytics",
       label: "Analytics",
       icon: <BarChart2 size={14} />,
-      section: "GOALS & ANALYSIS",
-    },
-    {
-      id: "calendar",
-      label: "Calendar View",
-      icon: <Calendar size={14} />,
       section: "GOALS & ANALYSIS",
     },
     {

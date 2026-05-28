@@ -189,14 +189,14 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
       {/* Reminders List */}
       <div className="space-y-2">
         {list.length > 0 ? (
-          list.map(rem => {
+          list.map((rem, index) => {
             const isOverdue = rem.dueDate < today && rem.status !== 'done';
             const isToday = rem.dueDate === today;
             const isDone = rem.status === 'done';
 
             return (
               <div 
-                key={rem.id}
+                key={`${rem.id}-${index}`}
                 className={`flex items-center gap-3.5 p-3.5 bg-[#0d0d1a] border rounded-xl hover:border-slate-700 transition-all ${
                   isOverdue ? 'border-rose-500/20 bg-rose-500/5' : 'border-[#1e1e38]'
                 }`}

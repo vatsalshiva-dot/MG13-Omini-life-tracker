@@ -484,12 +484,12 @@ export function EveningDebrief({ appState, setAppState, onClose, onNavigate }: E
                                 <div className="space-y-3 mt-8">
                                     <h3 className="text-sm font-black uppercase tracking-widest text-[#ffaa00] border-b border-[#2a2a50] pb-2 text-left">Today's Alarms & Reminders</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        {todaysReminders.map(rem => {
+                                        {todaysReminders.map((rem, index) => {
                                             const dec = sweepDecisions[`reminder-${rem.id}`];
                                             const isDone = dec === 'done';
                                             const isMissed = dec === 'missed';
                                             return (
-                                                <div key={rem.id} className={`flex items-center justify-between p-3 rounded-xl border transition-colors gap-2 w-full min-w-0 ${isDone ? 'bg-[#111928] border-[#ffaa00]/40' : (isMissed ? 'bg-red-900/10 border-red-500/20' : 'bg-[#111120] border-[#2a2a50]')}`}>
+                                                <div key={`${rem.id}-${index}`} className={`flex items-center justify-between p-3 rounded-xl border transition-colors gap-2 w-full min-w-0 ${isDone ? 'bg-[#111928] border-[#ffaa00]/40' : (isMissed ? 'bg-red-900/10 border-red-500/20' : 'bg-[#111120] border-[#2a2a50]')}`}>
                                                     <div className="flex items-center gap-2.5 flex-1 min-w-0">
                                                         <button type="button" onClick={() => setSweepDecisions(p => ({...p, [`reminder-${rem.id}`]: isDone ? 'missed' : 'done'}))} className={`shrink-0 w-5 h-5 rounded-md flex items-center justify-center border transition-colors ${isDone ? 'bg-[#ffaa00] border-[#ffaa00] text-[#0d0d1a]' : (isMissed ? 'bg-red-500/20 border-red-500/40 text-red-500' : 'border-[#2a2a50] text-transparent hover:border-[#ffaa00]')}`}>
                                                             {isMissed ? <X size={14} strokeWidth={4} /> : <CheckCircle2 size={14} strokeWidth={4} />}

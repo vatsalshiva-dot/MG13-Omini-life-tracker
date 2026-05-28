@@ -344,15 +344,21 @@ Available System Mutations (Commands):
 - LOG_TRACKER: { categoryId, item: "task name", status: "done" | "missed" | "skipped", notes: "optional extracted context", date?: "YYYY-MM-DD" }
 - EDIT_TRACKER: { categoryId, item: "task name", targetField: "reps" | "hours", value: number, date?: "YYYY-MM-DD" }
 - SET_TRACKER_GOAL: { categoryId, item: "task name", targetField: "reps" | "hours", value: number } <-- Use this only when setting, creating or changing routine targets or goal values for reps/hours (e.g. "set gym target reps to 15" or "set chemotherapy target to 3 hours") in the daily tracker.
-- CREATE_REMINDER: { id: "rem_" + Math.random(), title, priority: "high"|"medium"|"low", category: "general", dueDate: "YYYY-MM-DD", time: "HH:MM" }
+- CREATE_REMINDER: { id: "rem_" + Math.random(), title, priority: "high"|"medium"|"low", category: "general", dueDate: "YYYY-MM-DD", time: "HH:MM", enableAlert: boolean }
 - LOG_FINANCE: { id: "tx_" + Math.random(), type: "income"|"expense", amount: number, concept: string, category: string, date: "YYYY-MM-DD", currency: "USD" }
 - UPDATE_SETTINGS: { theme?: string, bgTheme?: string, dailyBudgetLimit?: number, dailyIncomeTarget?: number }
-- APPEND_JOURNAL: { topic: string, text: string, date?: "YYYY-MM-DD" }  <-- Use this to log thoughts, feelings, reflections, or general journal entries.
+- APPEND_JOURNAL: { topic: string, text: string, createNewHeading?: boolean, date?: "YYYY-MM-DD" }  <-- Use this to log thoughts, feelings, reflections, or general journal entries.
   - Guidelines for topics/headings:
-    1. Check stateContext.journalPrompts for existing journal headings (labels, etc.). If the user describes something belonging to an existing heading (e.g. wins, highlights, challenges, blockers, things for tomorrow), use the corresponding label/topic name (e.g., "Wins & Highlights", "Blockers & Challenges", "Today's Top 3 Focus").
-    2. If the user explicitly mentions a new custom heading or wants to record under a specific heading name (like "Gym Session" or "Medical Checkup"), map that name to 'topic'. For example, "add heading chemistry notes and write was very complex" maps to topic "chemistry notes" and text "was very complex".
-    3. If there are spoken thoughts, general entries, and commentary that DO NOT fit into existing headings, map them to the topic "Daily Reflection" (which maps to default Free Notes).
-    4. ALWAYS capture all spoken reflections, notes, or thoughts so no information is lost from their voice auto-log! Ensure everything described ends up under a valid heading or topic.
+    1. If the user explicitly mentions wishing to log under a brand-new custom heading (e.g. "create a new heading called Workout", "add new heading Biochemistry Notes and put X", or "make a new heading called Friday Musings"), set 'topic' to that heading name (e.g. "Biochemistry Notes") and set 'createNewHeading' to true.
+    2. If the user explicitly mentions wishing to log under an already existing heading (e.g. "add to my wins X", "put X under free notes", or "challenge is X"), find the matching heading in 'stateContext.journalPrompts' list and set 'topic' to its label or id (and leave 'createNewHeading' absent or false).
+    3. If the user does NOT explicitly specify any heading:
+       - Deeply analyze their spoken transcript to naturally categorize which of the existing prompts ('stateContext.journalPrompts') matches best.
+         * Pride, achievements, good occurrences -> "🏆 WINS & HIGHLIGHTS".
+         * Obstacles, difficulties, struggles -> "🧱 BLOCKERS & CHALLENGES".
+         * Priorities, to-do focus, lists -> "🎯 TODAY'S TOP 3 FOCUS".
+         * Intimate thoughts, generic logs, mood entries, daily overview -> "Daily Reflection" (which translates to free notes).
+       - If no heading category fits, or if they are just rambling generally without clear category matches, select "Daily Reflection" as the topic.
+    4. Ensure NO user spoken information is ever lost. If they cover multiple separate topics (e.g. "I had a great run today but had a tough meeting later"), split them into multiple separate APPEND_JOURNAL mutations so they land under correct headings correctly.
 - UPDATE_JOURNAL_METRICS: { mood?: number, energy?: number, addTags?: string[], date?: "YYYY-MM-DD" } <-- Scale is 1-5 for mood and energy.
 - ADD_EXPEDITION: { id: "exp_" + Math.random(), title, concept, status: "planning" }
 - DELETE_ITEM: { type: "reminder"|"finance"|"goal", id: string }

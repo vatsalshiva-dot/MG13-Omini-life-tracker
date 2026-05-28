@@ -50,8 +50,65 @@ export const ALL_FONTS = [
   { id: "press_start", label: "Press Start 2P (Geek Chiptune)", family: '"Press Start 2P", monospace' }
 ];
 
+const lightModeOverride = `
+      body { color: #0f172a !important; }
+      .text-white, .text-slate-100, .text-slate-200 { color: #020617 !important; }
+      .text-slate-300, .text-slate-400 { color: #0f172a !important; }
+      .text-slate-500, .text-slate-600 { color: #334155 !important; }
+      .text-slate-700, .text-slate-800, .text-slate-900 { color: #475569 !important; }
+      
+      .bg-slate-800, .bg-\\[\\#1e1e38\\], .bg-\\[\\#2a2a50\\] { background-color: #f1f5f9 !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
+      .bg-slate-900, .bg-slate-950, .bg-\\[\\#111120\\], .bg-\\[\\#0d0d1a\\] { background-color: #ffffff !important; border-color: #e2e8f0 !important; color: #0f172a !important; }
+
+      .border-\\[\\#2a2a50\\], .border-\\[#1e1e38\\], .border-slate-800, .border-slate-700, .border-slate-900, .border-dashed { border-color: #cbd5e1 !important; }
+      .border-\\[\\#111120\\] { border-color: #e2e8f0 !important; }
+      
+      .hover\\:bg-slate-800:hover { background-color: #e2e8f0 !important; color: #020617 !important; }
+      .hover\\:bg-slate-900:hover { background-color: #f1f5f9 !important; color: #020617 !important; }
+      
+        /* Remap neon colors for light mode to maintain high visibility */
+      .text-\\[\\#00ff88\\], .text-\\[\\#00c853\\] { color: #059669 !important; }
+      .text-\\[\\#ff00a0\\] { color: #e11d48 !important; }
+      .text-\\[\\#00d4ff\\] { color: #0284c7 !important; }
+      .text-\\[\\#ff4400\\] { color: #c2410c !important; }
+      .text-\\[\\#aa44ff\\] { color: #6b21a8 !important; }
+      
+      .bg-\\[\\#00ff88\\]\\/10 { background-color: #d1fae5 !important; color: #059669 !important; }
+      .bg-\\[\\#ff00a0\\]\\/10 { background-color: #ffe4e6 !important; color: #e11d48 !important; }
+      .bg-\\[\\#00d4ff\\]\\/10 { background-color: #e0f2fe !important; color: #0284c7 !important; }
+      .bg-rose-500\\/10, .bg-rose-500\\/20 { background-color: #ffe4e6 !important; color: #e11d48 !important; }
+      .bg-amber-500\\/10, .bg-amber-500\\/20 { background-color: #fef3c7 !important; color: #d97706 !important; }
+      
+      button, button .text-white, button.text-white, 
+      [class*="bg-emerald-"] .text-white, [class*="bg-emerald-"] .text-slate-100,
+      [class*="bg-rose-"] .text-white, [class*="bg-rose-"] .text-slate-100,
+      [class*="bg-red-"] .text-white, [class*="bg-indigo-"] .text-white, 
+      [class*="bg-blue-"] .text-white, [class*="bg-fuchsia-"] .text-white,
+      [class*="bg-[#ff6b1a]"], [class*="bg-[#ff6b1a]"] *,
+      [class*="hover:bg-[#ff6b1a]"]:hover,
+      [class*="hover:bg-[#ff6b1a]"]:hover *,
+      .text-white-force, .bg-emerald-500 *, .bg-rose-500 * {
+        color: #ffffff !important;
+      }
+      
+      /* Special handling for text inputs to remain readable */
+      textarea, input, select {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #cbd5e1 !important;
+      }
+      textarea:focus, input:focus, select:focus {
+        border-color: #94a3b8 !important;
+        color: #0f172a !important;
+      }
+      textarea::placeholder, input::placeholder {
+        color: #64748b !important;
+      }
+    `;
+
 const getThemeCSS = (colorHex?: string, bgTheme?: string, fontFamily?: string) => {
   let cssStr = "";
+  let extraCss = "";
 
   let derivedTextHex = colorHex || "#ff6b1a";
   let derivedBgTextHex = "#ffffff";
@@ -65,7 +122,7 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string, fontFamily?: string) =
     const yiq = ((r*299)+(g*587)+(b*114))/1000;
     
     derivedBgTextHex = yiq > 140 ? "#0f172a" : "#ffffff";
-    const isLightBg = ["swiss", "retro", "minimal", "cute", "playful", "proper3d", "proper2d"].includes(bgTheme || "");
+    const isLightBg = bgTheme === "draft";
     
     if (isLightBg) {
       // For light backgrounds, always guarantee deep high-contrast text by scaling down color luminosity
@@ -78,6 +135,7 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string, fontFamily?: string) =
         return s.length === 1 ? "0" + s : s;
       };
       derivedTextHex = `#${toHex(nr)}${toHex(ng)}${toHex(nb)}`;
+      extraCss = lightModeOverride;
     } else {
       // For dark backgrounds, always guarantee bright luminous high-contrast text by scaling up color luminosity
       const factor = yiq < 90 ? 1.8 : yiq < 150 ? 1.3 : 1.1;
@@ -156,44 +214,6 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string, fontFamily?: string) =
     let text300 = "#cbd5e1";
     let text400 = "#94a3b8";
     let text500 = "#64748b";
-    let extraCss = "";
-
-    // Shared overrides for light themes
-    const lightModeOverride = `
-      .text-slate-100, .text-white { color: #0f172a !important; }
-      .text-slate-200 { color: #1e293b !important; }
-      .text-slate-300 { color: #334155 !important; }
-      .text-slate-400 { color: #475569 !important; }
-      .text-slate-500 { color: #64748b !important; }
-      .border-\\[\\#2a2a50\\] { border-color: #cbd5e1 !important; }
-      .border-\\[\\#111120\\] { border-color: #e2e8f0 !important; }
-      .bg-\\[\\#111120\\] { background-color: #ffffff !important; }
-      .bg-\\[\\#0a0a14\\] { background-color: #f1f5f9 !important; }
-      .bg-\\[\\#2a2a50\\] { background-color: #cbd5e1 !important; }
-      .bg-\\[\\#2a2a50\\]\\/50 { background-color: rgba(203, 213, 225, 0.5) !important; }
-      body { color: #0f172a !important; }
-      
-      /* Safety exclusions: Preserve white text inside buttons, badges, selectors, active states and high-contrast labels */
-      button .text-white, button.text-white, 
-      [class*="bg-emerald-"] .text-white, [class*="bg-emerald-"] .text-slate-100,
-      [class*="bg-rose-"] .text-white, [class*="bg-rose-"] .text-slate-100,
-      [class*="bg-red-"] .text-white, [class*="bg-indigo-"] .text-white, 
-      [class*="bg-blue-"] .text-white, [class*="bg-fuchsia-"] .text-white,
-      [class*="bg-[#ff6b1a]"] .text-white, [class*="bg-[#ff6b1a]"] .text-slate-100,
-      [class*="hover:bg-[#ff6b1a]"]:hover .text-white,
-      [class*="hover:bg-[#ff6b1a]"]:hover .text-slate-100,
-      .text-white-force, .bg-emerald-500 *, .bg-rose-500 * {
-        color: #ffffff !important;
-      }
-
-      .text-\\[10px\\] { font-size: 10px !important; }
-      .text-xs { font-size: 12px !important; }
-      .text-sm { font-size: 14px !important; }
-      .text-base { font-size: 16px !important; }
-      .text-lg { font-size: 18px !important; }
-      .text-xl { font-size: 20px !important; }
-      .text-2xl { font-size: 24px !important; }
-    `;
 
     if (bgTheme === "superhero") {
       bg0 = "#05081c";
@@ -574,6 +594,38 @@ const getThemeCSS = (colorHex?: string, bgTheme?: string, fontFamily?: string) =
             border-radius: 16px !important; 
           }
         `;
+    } else if (bgTheme === "light1") {
+      bg0 = "#e0f2fe"; bg1 = "#f0f9ff"; sidebarBg = "#ffffff"; borderPrimary = "#7dd3fc"; borderSecondary = "#bae6fd"; text100 = "#0c4a6e";
+      const boxStyle = `background-color: #ffffff !important; border: 1px solid ${borderPrimary} !important;`;
+      extraCss = lightModeOverride + `.bg-\\[\\#111120\\], .bg-\\[\\#0a0a14\\], .bg-\\[\\#0d0d1a\\], .bg-\\[\\#111928\\], .bg-\\[\\#1e1e38\\], .bg-\\[\\#2a2a50\\] { ${boxStyle} color: ${text100} !important; }`;
+    } else if (bgTheme === "light2") {
+      bg0 = "#f8fafc"; bg1 = "#ffffff"; sidebarBg = "#ffffff"; borderPrimary = "#cbd5e1"; borderSecondary = "#e2e8f0"; text100 = "#0f172a";
+      const boxStyle = `background-color: #f1f5f9 !important; border: 1px solid ${borderPrimary} !important;`;
+      extraCss = lightModeOverride + `.bg-\\[\\#111120\\], .bg-\\[\\#0a0a14\\], .bg-\\[\\#0d0d1a\\], .bg-\\[\\#111928\\], .bg-\\[\\#1e1e38\\], .bg-\\[\\#2a2a50\\] { ${boxStyle} color: ${text100} !important; }`;
+    } else if (bgTheme === "light3") {
+      bg0 = "#dcfce7"; bg1 = "#f0fdf4"; sidebarBg = "#ffffff"; borderPrimary = "#4ade80"; borderSecondary = "#bbf7d0"; text100 = "#064e3b";
+      const boxStyle = `background-color: #ffffff !important; border: 1px solid ${borderPrimary} !important;`;
+      extraCss = lightModeOverride + `.bg-\\[\\#111120\\], .bg-\\[\\#0a0a14\\], .bg-\\[\\#0d0d1a\\], .bg-\\[\\#111928\\], .bg-\\[\\#1e1e38\\], .bg-\\[\\#2a2a50\\] { ${boxStyle} color: ${text100} !important; }`;
+    } else if (bgTheme === "light4") {
+      bg0 = "#ffedd5"; bg1 = "#fff7ed"; sidebarBg = "#ffffff"; borderPrimary = "#fdba74"; borderSecondary = "#fed7aa"; text100 = "#7c2d12";
+      const boxStyle = `background-color: #ffffff !important; border: 1px solid ${borderPrimary} !important;`;
+      extraCss = lightModeOverride + `.bg-\\[\\#111120\\], .bg-\\[\\#0a0a14\\], .bg-\\[\\#0d0d1a\\], .bg-\\[\\#111928\\], .bg-\\[\\#1e1e38\\], .bg-\\[\\#2a2a50\\] { ${boxStyle} color: ${text100} !important; }`;
+    } else if (bgTheme === "light5") {
+      bg0 = "#ede9fe"; bg1 = "#f5f3ff"; sidebarBg = "#ffffff"; borderPrimary = "#a78bfa"; borderSecondary = "#ddd6fe"; text100 = "#4c1d95";
+      const boxStyle = `background-color: #ffffff !important; border: 1px solid ${borderPrimary} !important;`;
+      extraCss = lightModeOverride + `.bg-\\[\\#111120\\], .bg-\\[\\#0a0a14\\], .bg-\\[\\#0d0d1a\\], .bg-\\[\\#111928\\], .bg-\\[\\#1e1e38\\], .bg-\\[\\#2a2a50\\] { ${boxStyle} color: ${text100} !important; }`;
+    } else if (bgTheme === "light6") {
+      bg0 = "#e0f7fa"; bg1 = "#f0fdf9"; sidebarBg = "#ffffff"; borderPrimary = "#67e8f9"; borderSecondary = "#cffafe"; text100 = "#134e4a";
+      const boxStyle = `background-color: #ffffff !important; border: 1px solid ${borderPrimary} !important;`;
+      extraCss = lightModeOverride + `.bg-\\[\\#111120\\], .bg-\\[\\#0a0a14\\], .bg-\\[\\#0d0d1a\\], .bg-\\[\\#111928\\], .bg-\\[\\#1e1e38\\], .bg-\\[\\#2a2a50\\] { ${boxStyle} color: ${text100} !important; }`;
+    } else if (bgTheme === "light7") {
+      bg0 = "#fef9c3"; bg1 = "#fffef0"; sidebarBg = "#ffffff"; borderPrimary = "#fde047"; borderSecondary = "#fef08a"; text100 = "#713f12";
+      const boxStyle = `background-color: #ffffff !important; border: 1px solid ${borderPrimary} !important;`;
+      extraCss = lightModeOverride + `.bg-\\[\\#111120\\], .bg-\\[\\#0a0a14\\], .bg-\\[\\#0d0d1a\\], .bg-\\[\\#111928\\], .bg-\\[\\#1e1e38\\], .bg-\\[\\#2a2a50\\] { ${boxStyle} color: ${text100} !important; }`;
+    } else if (bgTheme === "draft") {
+      bg0 = "#ffffff"; bg1 = "#f1f5f9"; sidebarBg = "#ffffff"; borderPrimary = "#cbd5e1"; borderSecondary = "#e2e8f0"; text100 = "#0f172a";
+      const boxStyle = `background-color: #f1f5f9 !important; border: 1px solid ${borderPrimary} !important;`;
+      extraCss = lightModeOverride + `.bg-\\[\\#111120\\], .bg-\\[\\#0a0a14\\], .bg-\\[\\#0d0d1a\\], .bg-\\[\\#111928\\], .bg-\\[\\#1e1e38\\], .bg-\\[\\#2a2a50\\] { ${boxStyle} color: ${text100} !important; }`;
     } else if (bgTheme === "retro") {
       bg0 = "#fffbe6";
       bg1 = "#ffffff";
@@ -1332,12 +1384,38 @@ export default function App() {
   };
 
   const handleOmniMutations = (data: any) => {
-    if (!data.mutations || !Array.isArray(data.mutations)) return;
+    if ((!data.mutations || !Array.isArray(data.mutations)) && !data.pendingAudio && !data.pendingTranscript) return;
     
     setAppState(prev => {
       let next = { ...prev };
+      const jd = activeDate;
       
-      data.mutations.forEach((mut: any) => {
+      if (data.pendingAudio || data.pendingTranscript) {
+         if (!next.journals[jd]) {
+            next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
+         }
+         if (data.pendingAudio) {
+            next.journals[jd].audioLog = data.pendingAudio;
+         }
+         if (data.pendingTranscript) {
+            const voicePromptId = "prompt_voice_auto_logs";
+            const hasVoicePrompt = next.journalPrompts.some(p => p.id === voicePromptId);
+            if (!hasVoicePrompt) {
+               next.journalPrompts.push({
+                  id: voicePromptId,
+                  label: "Voice Auto-Logs",
+                  placeholder: "Transcribed audio clips and commands..."
+               });
+            }
+            const localTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const logStr = `[${localTimeStr}] ${data.pendingTranscript}`;
+            const prevVal = next.journals[jd].sections[voicePromptId] || "";
+            next.journals[jd].sections[voicePromptId] = prevVal ? `${prevVal}\n${logStr}` : logStr;
+         }
+      }
+
+      const muts = Array.isArray(data.mutations) ? data.mutations : [];
+      muts.forEach((mut: any) => {
          const { type, payload } = mut;
          if (!payload) return;
          
@@ -1430,30 +1508,49 @@ export default function App() {
              if (!next.journals[jd]) {
                 next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
              }
-             let existingPrompt = next.journalPrompts.find(p => {
-                  const topicLower = payload.topic?.toLowerCase() || "";
-                  const plabel = p.label.toLowerCase();
-                  if (plabel === topicLower || 
-                      plabel.replace(/[^\w\s]/g, "").trim() === topicLower.replace(/[^\w\s]/g, "").trim() ||
-                      p.id === topicLower) {
-                      return true;
-                  }
-                  // Synonyms fallback
-                  if (topicLower.includes("reflection") || topicLower.includes("note") || topicLower.includes("thought") || topicLower.includes("general") || topicLower.includes("diary")) {
-                      return p.id === 'notes';
-                  } else if (topicLower.includes("win") || topicLower.includes("highlight") || topicLower.includes("gratitude")) {
-                      return p.id === 'wins';
-                  } else if (topicLower.includes("blocker") || topicLower.includes("challenge") || topicLower.includes("difficult")) {
-                      return p.id === 'blockers';
-                  } else if (topicLower.includes("tomorrow") || topicLower.includes("focus")) {
-                      return p.id === 'tomorrow';
-                  }
-                  return false;
-              });
+             let existingPrompt = null;
+             
+             // If not explicitly asked to create a new heading, try matching existing prompts
+             if (!payload.createNewHeading) {
+                 existingPrompt = next.journalPrompts.find(p => {
+                      const topicLower = payload.topic?.toLowerCase() || "";
+                      const plabel = p.label.toLowerCase();
+                      if (plabel === topicLower || 
+                          plabel.replace(/[^\w\s]/g, "").trim() === topicLower.replace(/[^\w\s]/g, "").trim() ||
+                          p.id === topicLower) {
+                          return true;
+                      }
+                      return false;
+                 });
+                 
+                 if (!existingPrompt) {
+                     // Try synonyms falling back to built-ins
+                     existingPrompt = next.journalPrompts.find(p => {
+                          const topicLower = payload.topic?.toLowerCase() || "";
+                          if (topicLower.includes("reflection") || topicLower.includes("note") || topicLower.includes("thought") || topicLower.includes("general") || topicLower.includes("diary")) {
+                              return p.id === 'notes';
+                          } else if (topicLower.includes("win") || topicLower.includes("highlight") || topicLower.includes("gratitude")) {
+                              return p.id === 'wins';
+                          } else if (topicLower.includes("blocker") || topicLower.includes("challenge") || topicLower.includes("difficult")) {
+                              return p.id === 'blockers';
+                          } else if (topicLower.includes("tomorrow") || topicLower.includes("focus")) {
+                              return p.id === 'tomorrow';
+                          }
+                          return false;
+                     });
+                 }
+             }
+
              if (!existingPrompt) {
                  const labelNormalized = payload.topic ? (payload.topic.charAt(0).toUpperCase() + payload.topic.slice(1)) : "Note";
-                 existingPrompt = { id: "prompt_" + Date.now() + Math.floor(Math.random() * 1000), label: "📌 " + labelNormalized.toUpperCase(), placeholder: `Write under ${labelNormalized}...` };
-                 next.journalPrompts.push(existingPrompt);
+                 
+                 // Try one more time to find an existing prompt by normalized label
+                 existingPrompt = next.journalPrompts.find(p => p.label.toLowerCase().includes(labelNormalized.toLowerCase()));
+                 
+                 if (!existingPrompt) {
+                    existingPrompt = { id: "prompt_" + Date.now() + Math.floor(Math.random() * 1000), label: "📌 " + labelNormalized.toUpperCase(), placeholder: `Write under ${labelNormalized}...` };
+                    next.journalPrompts.push(existingPrompt);
+                 }
              }
              const cur = next.journals[jd].sections[existingPrompt.id] || "";
              next.journals[jd].sections[existingPrompt.id] = cur ? cur + "\n" + payload.text : payload.text;
@@ -3038,8 +3135,6 @@ ${summaryText}
             onOmniCommand={handleOmniMutations}
             onSaveJournal={handleSaveJournal}
             onUpdateJournalPrompts={handleUpdateJournalPrompts}
-            autoStartVoice={autoStartVoiceLog}
-            onClearAutoStartVoice={() => setAutoStartVoiceLog(false)}
           />
         );
       case "goals":
@@ -3684,7 +3779,7 @@ Provide 3-5 exact, natural-language commands based on your Roadmap that I can co
           onPlanTomorrow={() => setShowPlanTomorrow(true)}
           onInstallApp={handleInstallApp}
           onToggleGlobalVoice={() => {
-             setActiveView("daily");
+             setActiveView("journal");
              setTimeout(() => {
                 setAutoStartVoiceLog(true);
               }, 100);
