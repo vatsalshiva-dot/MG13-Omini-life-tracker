@@ -3,6 +3,7 @@ import { AppState, TrackerCategory, JournalEntry, Reminder, JournalPrompt } from
 import { fmtShort, fmtDate, todayStr } from '../utils/date';
 import { CATS, getAllCats, getCatLabel } from '../utils/storage';
 import { PriestEngine } from '../utils/priestEngine';
+import { nlpProcessor, AnalysisResult } from '../lib/ai/NlpProcessor';
 import { 
   Plus, Trash2, Edit3, Settings, Bell, Calendar, CheckSquare, 
   Smile, Zap, Award, ThumbsUp, Tag, PlusCircle, Check, MapPin, Image as ImageIcon, ClipboardCopy, FileImage, Search, Brain, X, Loader, Mic, MicOff, FileText
@@ -176,6 +177,26 @@ export const JournalView: React.FC<JournalViewProps> = ({
   
   const recognitionRef = useRef<any>(null);
   const userStoppedRecordingRef = useRef(false);
+
+  const [localNlp, setLocalNlp] = useState<AnalysisResult | null>(null);
+
+  useEffect(() => {
+    const sectionsText = Object.values(entry.sections || {}).join(' ');
+    const combined = (sectionsText + ' ' + accumulatedTranscript).trim();
+
+    if (!combined) {
+      setLocalNlp(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      nlpProcessor.analyzeText(combined).then((res) => {
+        setLocalNlp(res);
+      }).catch(console.error);
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [entry.sections, accumulatedTranscript]);
 
   useEffect(() => {
      if (autoStartVoice) {
@@ -1078,6 +1099,88 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 );
               })}
             </div>
+
+            {/* Live Micro-Model Local NLP Core Insights Panel */}
+            {localNlp && (
+              <div className="p-4 bg-[#0d0d1a]/95 border border-[#2a2a50]/60 rounded-xl space-y-4 shadow-lg animate-fadeIn">
+                <div className="flex items-center justify-between border-b border-[#2a2a50]/40 pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#00ff88] animate-ping" />
+                    <span className="text-[10px] text-emerald-400 font-black tracking-widest font-mono uppercase">
+                      Offline Cognitive Core (Workers.js)
+                    </span>
+                  </div>
+                  <span className="text-[9px] text-slate-500 font-mono font-bold uppercase">
+                    0 MB Overhead
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Sentiment Metric Grid Container */}
+                  <div className="space-y-1.5 bg-[#111120]/65 border border-[#2a2a50]/20 p-3 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">
+                        Real-time Mood Sentiment
+                      </span>
+                      <span className={`text-[10px] font-black uppercase tracking-wider ${
+                        localNlp.sentiment > 0.15 ? 'text-emerald-400' : localNlp.sentiment < -0.15 ? 'text-rose-500' : 'text-slate-400'
+                      }`}>
+                        {localNlp.label} ({localNlp.sentiment > 0 ? '+' : ''}{localNlp.sentiment})
+                      </span>
+                    </div>
+
+                    <div className="h-2 bg-slate-950 rounded-full overflow-hidden relative border border-[#2a2a50]/40">
+                      <div 
+                        className={`h-full transition-all duration-300 rounded-full ${
+                          localNlp.sentiment > 0.15 ? 'bg-gradient-to-r from-emerald-500 to-green-400' : localNlp.sentiment < -0.15 ? 'bg-gradient-to-r from-rose-500 to-coral-400' : 'bg-slate-500'
+                        }`}
+                        style={{ 
+                          width: `${Math.round(((localNlp.sentiment + 1.0) / 2.0) * 100)}%` 
+                        }}
+                      />
+                    </div>
+                    <p className="text-[9px] text-slate-400 italic">
+                      Automated assessment recommends an active <b>Mood Level: {localNlp.moodScore}/5</b>
+                    </p>
+                  </div>
+
+                  {/* Smart Tag extractor */}
+                  <div className="space-y-2 bg-[#111120]/65 border border-[#2a2a50]/20 p-3 rounded-xl">
+                    <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase block">
+                      Discovered Keywords
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {localNlp.keywords.length > 0 ? (
+                        localNlp.keywords.map((kw) => {
+                          const isAttached = (entry.tags || []).includes(kw);
+                          return (
+                            <button
+                              key={kw}
+                              onClick={() => {
+                                if (!state.journalTags.includes(kw)) {
+                                  onUpdateJournalTags([...state.journalTags, kw]);
+                                }
+                                toggleTag(kw);
+                              }}
+                              className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                                isAttached
+                                  ? 'bg-[#ff6b1a]/20 border-[#ff6b1a]/55 text-[#ff6b1a]'
+                                  : 'bg-[#111120] border-[#2a2a50]/70 text-[#00d4ff] hover:border-[#00d4ff]/40 hover:bg-[#00d4ff]/5'
+                              }`}
+                            >
+                              <span>{isAttached ? '✓' : '+'}</span>
+                              <span>#{kw}</span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <span className="text-[9px] text-slate-500 font-mono">No clear keywords identified yet...</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
 
             {/* Media & Sketch Canvas */}

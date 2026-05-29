@@ -33,7 +33,8 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
-  Check
+  Check,
+  Network
 } from "lucide-react";
 
 interface SidebarProps {
@@ -163,6 +164,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: "analytics",
       label: "Analytics",
       icon: <BarChart2 size={14} />,
+      section: "GOALS & ANALYSIS",
+    },
+    {
+      id: "graph",
+      label: "Knowledge Graph",
+      icon: <Network size={14} />,
       section: "GOALS & ANALYSIS",
     },
     {

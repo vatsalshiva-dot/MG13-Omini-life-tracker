@@ -145,6 +145,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
          recognitionRef.current = recognition;
          recognition.continuous = false;
          recognition.interimResults = true;
+         recognition.lang = 'en-US';
          
          let finalTranscript = '';
          let lastInterim = '';

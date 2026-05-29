@@ -12,6 +12,9 @@ import {
 } from "./types";
 import {
   loadData,
+  loadDataIndexedDB,
+  checkAndTriggerAutoBackup,
+  triggerBackupDownload,
   saveData,
   loadSyncCfg,
   saveSyncCfg,
@@ -1175,6 +1178,7 @@ import { FocusAudioView } from "./components/FocusAudioWidget";
 import { TelemetryView } from "./components/TelemetryView";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeAestheticBanner } from "./components/ThemeAestheticBanner";
+import { GraphView } from "./components/GraphView";
 
 import {
   AlertCircle,
@@ -1190,7 +1194,7 @@ import {
   ChevronLeft,
 } from "lucide-react";
 
-import { getFileHandle } from "./utils/ghost";
+import { getFileHandle, ghostSyncWrite } from "./utils/ghost";
 import { getAllCats } from "./utils/storage";
 
 const GhostAlert = ({ muted }: { muted?: boolean }) => {
@@ -2038,17 +2042,29 @@ ${summaryText}
 
   // 1. Initial Load
   useEffect(() => {
+    // Sync load for fast initial boot (localStorage)
     let loaded = loadData();
-    // If in demo mode and no demo data was loaded from storage, use DEMO_STATE
+
     if (
       window.location.search.includes("demo=true") &&
       !localStorage.getItem("demo_lt_v5")
     ) {
       loaded = DEMO_STATE;
       saveData(DEMO_STATE);
-    }
+      setAppState(loaded);
+    } else {
+      setAppState(loaded);
 
-    setAppState(loaded);
+      // Async load from robust IndexedDB and Auto-Backup trigger
+      loadDataIndexedDB().then((idbData) => {
+        if (idbData) {
+          setAppState(idbData);
+          checkAndTriggerAutoBackup(idbData);
+        } else {
+          checkAndTriggerAutoBackup(loaded);
+        }
+      });
+    }
 
     const loadedSync = loadSyncCfg();
     setSyncCfg(loadedSync);
@@ -2058,6 +2074,22 @@ ${summaryText}
         console.error("Service Worker registration failed:", err);
       });
     }
+
+    const handleOnline = () => {
+      console.log("Network online, triggering remote storage sync...");
+      const currentSync = loadSyncCfg();
+      if (currentSync.provider === "gist" && currentSync.gistToken && currentSync.gistId) {
+        syncGist(currentSync, appState).catch(console.error);
+      } else if (currentSync.provider === "jsonbin" && currentSync.jbKey && currentSync.jbId) {
+        syncJSONBin(currentSync, appState).catch(console.error);
+      }
+      ghostSyncWrite(appState).catch(console.error);
+    };
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
   }, []);
 
   // 1.5. Local Storage limit optimization utilities
@@ -3782,6 +3814,8 @@ ${summaryText}
             getDayD={getDayD}
           />
         );
+      case "graph":
+        return <GraphView state={appState} />;
       case "search":
         return (
           <SearchView

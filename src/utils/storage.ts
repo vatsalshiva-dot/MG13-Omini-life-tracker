@@ -1,8 +1,10 @@
 import { AppState, TrackerCategory, GoalsState, SyncConfig } from '../types';
 import { ghostSyncWrite } from './ghost';
+import { get, set } from 'idb-keyval';
 
 export const SK = 'lt_v5';
 export const SYNC_KEY = 'lt_v5_sync';
+export const BACKUP_TIMESTAMP_KEY = 'lt_v5_last_auto_backup';
 
 export const CATS: { id: TrackerCategory; label: string; icon: string; neon: string }[] = [
   { id: 'studies', label: 'Studies', icon: '▦', neon: '#00d4ff' },
@@ -70,8 +72,6 @@ export function defData(): AppState {
 
 export function loadData(): AppState {
   if (typeof window !== 'undefined' && window.location.search.includes('demo=true')) {
-    // Return demo state dynamically imported to avoid circular dependencies if any,
-    // or just return from local storage key demo_lt_v5 
     try {
       const raw = localStorage.getItem('demo_' + SK);
       if (raw) {
@@ -80,8 +80,6 @@ export function loadData(): AppState {
          return d;
       }
     } catch(e) {}
-    // If we want to return DEMO_STATE directly we can export a function in demoData.ts
-    // For now we'll just fall back to defData if not loaded yet if we rely on App.tsx doing the first setup
   }
 
   try {
@@ -97,19 +95,85 @@ export function loadData(): AppState {
   return defData();
 }
 
-export function saveData(data: AppState) {
+/** 
+ * IndexedDB Async Migration & Load 
+ */
+export async function loadDataIndexedDB(): Promise<AppState | null> {
   try {
     const isDemo = typeof window !== 'undefined' && window.location.search.includes('demo=true');
-    localStorage.setItem(isDemo ? 'demo_' + SK : SK, JSON.stringify(data));
+    const key = isDemo ? 'demo_' + SK : SK;
+    let data = await get<AppState>(key);
+
+    if (!data) {
+      // First time with IndexedDB: attempt to migrate from localStorage
+      const localRaw = localStorage.getItem(key);
+      if (localRaw) {
+        data = JSON.parse(localRaw);
+        await set(key, data); // store to IDB immediately
+      }
+    }
+
+    if (data) {
+      migrate(data);
+      return data;
+    }
   } catch (e) {
-    console.error('Local Storage full!', e);
+    console.error("Failed to load IndexedDB data", e);
+  }
+  return null;
+}
+
+export function saveData(data: AppState) {
+  const isDemo = typeof window !== 'undefined' && window.location.search.includes('demo=true');
+  const dKey = isDemo ? 'demo_' + SK : SK;
+  
+  // Keep localStorage slightly updated if within limit but heavily rely on sync IDB
+  try {
+    localStorage.setItem(dKey, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Local Storage full! Relying solely on IndexedDB.');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('omnilife_storage_full'));
     }
   }
-  if (typeof window !== 'undefined' && !window.location.search.includes('demo=true')) {
+
+  // Fire and forget IndexedDB write
+  if (typeof window !== 'undefined') {
+    set(dKey, data).catch(console.error);
+  }
+
+  if (typeof window !== 'undefined' && !isDemo) {
     ghostSyncWrite(data).catch(() => {});
   }
+}
+
+/** 
+ * Auto-Backup System 
+ * Checks if 7 days have passed, and triggers an automated JSON download backup of the AppState 
+ */
+export function checkAndTriggerAutoBackup(data: AppState) {
+  if (typeof window === 'undefined') return;
+  const lastBackupStr = localStorage.getItem(BACKUP_TIMESTAMP_KEY);
+  const now = Date.now();
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+  if (!lastBackupStr || (now - parseInt(lastBackupStr, 10)) > SEVEN_DAYS_MS) {
+    triggerBackupDownload(data, "AUTO_WEEKLY");
+    localStorage.setItem(BACKUP_TIMESTAMP_KEY, now.toString());
+  }
+}
+
+export function triggerBackupDownload(data: AppState, prefix: string = "MANUAL") {
+  const payload = JSON.stringify(data, null, 2);
+  const blob = new Blob([payload], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const d = new Date();
+  const dateStr = d.toISOString().split("T")[0];
+  a.download = `omnilife_backup_${prefix}_${dateStr}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 
