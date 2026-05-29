@@ -2,24 +2,28 @@ import React, { useState } from 'react';
 import { AppState } from '../types';
 import { Bot, CheckCircle2, ClipboardCopy, PieChart, Target, Calendar, CreditCard, Compass, Headphones, Search, Info } from 'lucide-react';
 import { StepByStepGuideModal } from './StepByStepGuideModal';
+import { useAIQuery } from '../hooks/useLocalAI';
+import { AIResponsePanel } from './AIResponsePanel';
 
 interface AiAnalystViewProps {
   state: AppState;
-  onOpenAIAnalyst: (customPrompt?: string | React.MouseEvent) => void;
-  onGeneratePrompt: (module: string) => void;
+  onOpenAIAnalyst?: (customPrompt?: string | React.MouseEvent) => void;
+  onGeneratePrompt?: (module: string) => void;
 }
 
-export const AiAnalystView: React.FC<AiAnalystViewProps> = ({ state, onOpenAIAnalyst, onGeneratePrompt }) => {
-  const [toast, setToast] = useState<string | null>(null);
+export const AiAnalystView: React.FC<AiAnalystViewProps> = ({ state }) => {
   const [tutorialTarget, setTutorialTarget] = useState<string | null>(null);
+  
+  // Initialize our new local AI engine
+  const ai = useAIQuery(state);
 
   const modules = [
-     { id: 'all', name: 'Complete Brain Scan (All Data)', desc: 'Holistic cross-analysis of every module', icon: <Bot size={18} /> },
-     { id: 'daily', name: 'Habits & Routine', desc: 'Focus strictly on daily streaks and completion', icon: <Calendar size={18} /> },
-     { id: 'goals', name: 'Goals & Targets', desc: 'Am I hitting my targets? Track progress.', icon: <Target size={18} /> },
-     { id: 'finances', name: 'Finances & Burn Rate', desc: 'Analyze spending against budgets', icon: <CreditCard size={18} /> },
-     { id: 'expeditions', name: 'Expeditions', desc: 'Analyze travel plans and packing lists', icon: <Compass size={18} /> },
-     { id: 'focus_audio', name: 'Focus Audio Patterns', desc: 'Analyze correlation between audio and productivity', icon: <Headphones size={18} /> },
+     { id: 'all', name: 'Complete Brain Scan', desc: 'Holistic cross-analysis of every module', icon: <Bot size={18} />, action: ai.analyze },
+     { id: 'habit', name: 'Habit Deep Dive', desc: 'Focus strictly on daily streaks and completion', icon: <Calendar size={18} />, action: () => ai.query('habit') },
+     { id: 'goals', name: 'Goals & Targets', desc: 'Am I hitting my targets? Track progress.', icon: <Target size={18} />, action: () => ai.query('goal') },
+     { id: 'mood', name: 'Mood & Energy', desc: 'Analyze mood trends and factors.', icon: <Search size={18} />, action: () => ai.query('mood') },
+     { id: 'week', name: 'Weekly Summary', desc: 'View 7-day performance.', icon: <PieChart size={18} />, action: ai.week },
+     { id: 'motivate', name: 'Motivation Boost', desc: 'Need a push? Get encouraging stats.', icon: <CheckCircle2 size={18} />, action: ai.motivate },
   ];
 
   const tutorials = [
@@ -41,15 +45,22 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({ state, onOpenAIAna
           <Bot className="text-[#00ff88]" size={28} /> AI Analyst Hub
         </h2>
         <p className="text-sm text-slate-400 mt-2 font-medium max-w-2xl">
-          Complete intelligence center for your Omnilife Tracker data. Pick a domain to analyze or run a full system check. We'll compile an exhaustive blueprint and open the context modal, where you can select your preferred AI.
+          Complete intelligence center for your Omnilife Tracker data. Pick a domain to analyze or run a full system check. We run a 100% offline, local AI engine to analyze your progress.
         </p>
       </header>
+
+      {/* RENDER LOCAL AI RESPONSE */}
+      {(ai.response || ai.loading || ai.error) && (
+        <div className="bg-[#111120] border border-[#00ff88]/40 shadow-[0_0_30px_rgba(0,255,136,0.1)] rounded-2xl p-6 mb-8 mt-4 relative">
+          <AIResponsePanel response={ai.response} loading={ai.loading} error={ai.error} className="prose prose-invert max-w-none text-sm text-slate-300" />
+        </div>
+      )}
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
          {modules.map(m => (
             <button 
                key={m.id}
-               onClick={() => onGeneratePrompt(m.id)}
+               onClick={m.action}
                className="bg-[#111120] border border-[#2a2a50] hover:border-[#00ff88]/50 p-5 rounded-2xl flex flex-col items-start text-left transition-all group"
             >
                <div className="w-10 h-10 rounded-xl bg-[#2a2a50] text-[#00ff88] group-hover:bg-[#00ff88] group-hover:text-black transition flex items-center justify-center mb-3 shadow-lg">
@@ -79,17 +90,6 @@ export const AiAnalystView: React.FC<AiAnalystViewProps> = ({ state, onOpenAIAna
             </button>
           ))}
         </div>
-      </div>
-
-      <div className="mt-12 bg-[#0a0a14] border border-[#2a2a50] rounded-2xl p-6">
-         <h4 className="font-extrabold uppercase tracking-widest text-[#00ff88] text-xs mb-4">How it works</h4>
-         <p className="text-sm text-slate-400 mb-4">
-           Select a module above. We will bundle your data and open the <strong>AI Context Hub</strong>, where you can instantly copy the prompt and jump into ChatGPT, Claude, Gemini, or Perplexity.
-         </p>
-         <div className="bg-[#00ff88]/10 text-[#00ff88] p-3 rounded-lg text-xs font-bold border border-[#00ff88]/20 flex items-start gap-2">
-            <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
-            <p><strong>Note:</strong> The AI tool acts as your customized data analyst. Your data is passed entirely via the manual prompt you paste, keeping your sync encrypted offline first.</p>
-         </div>
       </div>
 
       {tutorialTarget && (

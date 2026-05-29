@@ -443,19 +443,25 @@ export class ResponseSynthesizer {
 export class LLMEnhancer {
   async enhance(prompt: string, localResponse: string, result: any, onChunk: (text: string) => void) {
     try {
-      const stateSummary = { recap: result.recap };
-      const response = await fetch('/api/search-life', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: prompt, today: new Date().toISOString().split('T')[0], stateSummary })
-      });
-      const data = await response.json();
-      if (data.answer && !data.error) {
-          onChunk(data.answer);
-          return { answer: data.answer, filters: data.filters };
+      const { LocalAI } = await import('../lib/ai');
+      // Create a mock OmniData or use existing state
+      const data = {
+        habits: [],
+        goals: [],
+        journal: [],
+        moods: [],
+        userName: 'User',
+      };
+      
+      const ai = new LocalAI(data);
+      const response = await ai.query(prompt);
+      
+      if (response && response.content) {
+         onChunk(response.content);
+         return { answer: response.content, filters: {} };
       }
     } catch(err) {
-      console.warn("Gemini Cloud Engine failed.", err);
+      console.warn("Local AI Engine failed.", err);
     }
     return null;
   }

@@ -57,7 +57,7 @@ export const FinancesView: React.FC<{
   const [textStatement, setTextStatement] = useState("");
   const [showStatementModal, setShowStatementModal] = useState(false);
 
-  const [financeTab, setFinanceTab] = useState<'quick' | 'advanced' | 'file_import' | 'text_import' | 'external_ai'>('quick');
+  const [financeTab, setFinanceTab] = useState<'quick' | 'advanced' | 'file_import' | 'text_import' | 'external_ai' | 'splits'>('quick');
   const [importSubTab, setImportSubTab] = useState<'file' | 'paste'>('file');
   const [rawPasteText, setRawPasteText] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -284,30 +284,15 @@ Prepend or include this command string clearly before your code block:
     const interval = setInterval(() => {
         setAiPercent(p => Math.min(p + Math.floor(Math.random() * 20), 96));
     }, 500);
-    setRawPasteText(text || "[File Attached: AI Vision Processing...]"); // just to show it in UI optionally
+    setRawPasteText(text || "[File Attached: Offline Local Parsing...]"); // just to show it in UI optionally
     
     const controller = new AbortController();
     setAiAbortController(controller);
 
     try {
-      const response = await fetch('/api/parse-finances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text, 
-          filename,
-          localTime: new Date().toISOString(),
-          today: new Date().toLocaleDateString('en-CA'),
-          ...(fileData && fileMime ? { fileData, fileMime } : {})
-        }),
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || 'Failed to parse on server');
-      }
-      const data = await response.json();
-      const parsed = data.transactions || data;
+      const { parseFinancesLocally } = await import('../lib/ai/CommandParser');
+      const parsed = parseFinancesLocally(text, new Date().toLocaleDateString('en-CA'));
+      
       if (!Array.isArray(parsed) || parsed.length === 0) {
         alert("The AI could not confidently detect any ledger history. Try pasting clear text!");
         setParsedPasteTxs([]);

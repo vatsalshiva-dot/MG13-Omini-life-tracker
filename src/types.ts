@@ -4,9 +4,10 @@ export interface Profile {
   email: string;
   dailyBudgetLimit?: number;
   dailyIncomeTarget?: number;
+  preferredCurrency?: string;
 }
 
-export type TrackerCategory = 'studies' | 'habits' | 'leisure' | 'custom';
+export type TrackerCategory = string;
 
 export interface TrackerItem {
   id: string; // usually name
@@ -26,7 +27,7 @@ export interface DayEntry {
 
 export interface DailyState {
   [date: string]: {
-    [category in TrackerCategory]?: {
+    [category: string]: {
       [item: string]: DayEntry;
     };
   };
@@ -42,13 +43,15 @@ export interface Reminder {
   title: string;
   dueDate: string; // YYYY-MM-DD
   time: string; // HH:MM (24h) or empty
-  type: string;
+  type?: string;
   priority: 'low' | 'medium' | 'high';
-  repeat: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
-  notes: string;
+  repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  notes?: string;
   status: 'pending' | 'done';
   enableAlert?: boolean;
   alertOffset?: number; // minutes before to show popup alert
+  createdAt?: string;
+  category?: string;
 }
 
 export interface PomoSession {
@@ -78,6 +81,7 @@ export interface JournalEntry {
   location?: { lat: number; lng: number } | string;
   photos?: string[];
   sketches?: string[];
+  audioTracks?: any[];
 }
 
 export interface GoalCategory {
@@ -176,10 +180,12 @@ export interface AppState {
   hasSeenWelcome?: boolean;
   onboarding?: Record<string, boolean>;
   profile: Profile;
-  items: { [category in TrackerCategory]: string[] };
+  items: { [category: string]: string[] };
+  categories?: { id: string; label: string; icon: string; neon: string }[];
+  projects?: any[];
   daily: DailyState;
-  repsTarget: { [category in TrackerCategory]?: { [item: string]: number } };
-  hoursTarget: { [category in TrackerCategory]?: { [item: string]: number } };
+  repsTarget: { [category: string]: { [item: string]: number } };
+  hoursTarget: { [category: string]: { [item: string]: number } };
   financeBudgets?: { d: number; w: number; m: number; y: number };
   financeIncomeTargets?: { d: number; w: number; m: number; y: number };
   reminders: Reminder[];
@@ -199,5 +205,5 @@ export interface AppState {
   bgTheme?: string;
   fontFamily?: string;
   hideGuideFloater?: boolean;
-  categoryLabels?: { [category in TrackerCategory]?: string };
+  categoryLabels?: { [category: string]: string };
 }

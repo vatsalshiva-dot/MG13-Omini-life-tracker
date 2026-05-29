@@ -1,7 +1,7 @@
 import React from "react";
 import { AppState, TrackerCategory } from "../types";
 import { fmtDate, fmtShort, getWeek } from "../utils/date";
-import {  CATS , getCatLabel } from "../utils/storage";
+import {  CATS, getAllCats , getCatLabel } from "../utils/storage";
 import { DashboardWeather } from "./DashboardWeather";
 import {
   Play,
@@ -204,7 +204,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return streakCount;
     };
 
-    CATS.forEach((c) => {
+    getAllCats(state).forEach((c) => {
       (state.items[c.id] || []).forEach((it) => {
         max = Math.max(max, calculateStreak(c.id, it));
       });
@@ -241,10 +241,13 @@ Completed: ${stats.done}/${stats.total} (${stats.pct}%)
 Total Hours Logged: ${stats.hrs.toFixed(1)}h
 Overall Satisfaction: ${stats.sat ? stats.sat.toFixed(1) : "-"}/5
 
-Categories:
-${CATS.map((c) => `- ${getCatLabel(state, c.id)}: ${state.items[c.id]?.length || 0} items monitored`).join("\n")}
+Categories & Tracking Targets:
+${getAllCats(state).map((c) => `- ${getCatLabel(state, c.id)}: ${state.items[c.id]?.length || 0} items monitored`).join("\n")}
 
-Upcoming Reminders:
+Active Projects:
+${(state.projects || []).filter((p: any) => p.status !== 'completed').map((p: any) => `- ${p.title} (${p.tasks?.length || 0} tasks)`).join("\n")}
+
+Upcoming Reminders & Recurring:
 ${upcomingReminders.map((r) => `- ${r.title} [Priority: ${r.priority}] on ${r.dueDate} ${r.time || ""}`).join("\n")}
 
 Focus/Pomo Sessions today:
@@ -258,7 +261,7 @@ Mood: ${state.journals[today]?.mood || "Not logged"}
 Energy: ${state.journals[today]?.energy || "Not logged"}
 Tags: ${(state.journals[today]?.tags || []).join(", ")}
 
-Please analyze this data, summarize the productivity trends, and provide 3 actionable insights to improve performance for next week.
+Please analyze this comprehensive data encompassing my habits, projects, reminders, and psychological state. Summarize my current daily performance trends and provide 3 actionable, highly specific insights to optimize my efficiency and overall output for next week.
     `.trim();
 
     if (onOpenAIAnalyst) {
@@ -307,7 +310,7 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                         {(() => {
                             const pending: any[] = [];
-                            CATS.forEach((cat) => {
+                            getAllCats(state).forEach((cat) => {
                                 const items = Array.from(new Set([...(state.items[cat.id]||[]), ...Object.keys(state.daily[activeDate]?.[cat.id]||{})]));
                                 items.forEach(item => {
                                     const d = getDayD(activeDate, cat.id, item);
@@ -319,7 +322,7 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
                             return pending.map((p, idx) => (
                                 <button key={idx} onClick={() => handleApplySOS(p.cat, p.item)} className="w-full bg-[#1e1e38] border border-[#2a2a50] hover:border-rose-500 active:bg-rose-500/20 text-left p-3 rounded-lg text-white font-bold flex justify-between items-center transition-all">
                                     <span>{p.item}</span>
-                                    <span className="text-[10px] text-slate-500 uppercase tracking-widest">{CATS.find(c => c.id === p.cat)?.label}</span>
+                                    <span className="text-[10px] text-slate-500 uppercase tracking-widest">{getAllCats(state).find(c => c.id === p.cat)?.label}</span>
                                 </button>
                             ));
                         })()}
@@ -645,7 +648,7 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
           </div>
 
           <div className="space-y-3">
-            {CATS.map((cat) => {
+            {getAllCats(state).map((cat) => {
               const items = state.items[cat.id] || [];
               const done = items.filter(
                 (it) => getDayD(today, cat.id, it).status === "done",
@@ -803,7 +806,7 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
           </button>
         </div>
         <div className="flex flex-wrap gap-2">
-          {CATS.flatMap(cat => 
+          {getAllCats(state).flatMap(cat => 
              (state.items[cat.id] || []).map(item => {
                const d = getDayD(today, cat.id, item);
                const statusColor = d.status === 'done' ? "bg-[#00ff88]/20 text-[#00ff88] border-[#00ff88]/50" :
@@ -821,7 +824,7 @@ Please analyze this data, summarize the productivity trends, and provide 3 actio
                )
              })
           )}
-          {CATS.every(cat => (state.items[cat.id] || []).length === 0) && (
+          {getAllCats(state).every(cat => (state.items[cat.id] || []).length === 0) && (
              <p className="text-[10px] uppercase text-slate-500 font-mono">No habits tracked yet. Add them in Daily Tracker.</p>
           )}
         </div>

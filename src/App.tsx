@@ -1191,6 +1191,7 @@ import {
 } from "lucide-react";
 
 import { getFileHandle } from "./utils/ghost";
+import { getAllCats } from "./utils/storage";
 
 const GhostAlert = ({ muted }: { muted?: boolean }) => {
   const [showAlert, setShowAlert] = useState(false);
@@ -1445,12 +1446,12 @@ export default function App() {
          }
       }
 
-      const getTargetCategory = (cat: string): 'studies' | 'habits' | 'leisure' | 'custom' => {
+      const getTargetCategory = (cat: string): string => {
          const c = (cat || "").toLowerCase();
          if (c === "studies" || c === "learning" || c === "education" || c === "work" || c === "career" || c === "growth" || c === "finance" || c === "programming") return "studies";
          if (c === "habits" || c === "health" || c === "routine" || c === "fitness" || c === "sport" || c === "gym" || c === "mind") return "habits";
          if (c === "leisure" || c === "fun" || c === "social" || c === "hobby" || c === "hobbies" || c === "guitar") return "leisure";
-         return "custom";
+         return c || "custom";
       };
 
       const muts = Array.isArray(data.mutations) ? data.mutations : [];
@@ -1458,7 +1459,18 @@ export default function App() {
           const { type, payload } = mut;
           if (!payload) return;
           
-          if (type === 'CREATE_GOAL') {
+          if (type === 'CREATE_CATEGORY') {
+              if (!next.categories) next.categories = [];
+              if (!next.categories.find(c => c.id === payload.id)) {
+                  next.categories.push({
+                      id: payload.id,
+                      label: payload.label,
+                      icon: payload.icon || '◈',
+                      neon: payload.neon || '#00d4ff'
+                  });
+              }
+              if (!next.items[payload.id]) next.items[payload.id] = [];
+          } else if (type === 'CREATE_GOAL') {
               if (!next.financeGoals) next.financeGoals = [];
               next.financeGoals.push({
                  id: payload.id || "g_" + Date.now(),
@@ -1478,6 +1490,13 @@ export default function App() {
                   if (!next.items[mappedCat].includes(payload.item)) {
                       next.items[mappedCat].push(payload.item);
                   }
+                  
+                  if (mappedCat !== 'studies' && mappedCat !== 'habits' && mappedCat !== 'leisure' && mappedCat !== 'custom') {
+                     if (!next.categories) next.categories = [];
+                     if (!next.categories.find(c => c.id === mappedCat)) {
+                         next.categories.push({ id: mappedCat, label: mappedCat.charAt(0).toUpperCase() + mappedCat.slice(1), icon: '◈', neon: '#00d4ff' });
+                     }
+                  }
               }
           } else if (type === 'LOG_TRACKER') {
               const mappedCat = getTargetCategory(payload.categoryId);
@@ -1485,6 +1504,12 @@ export default function App() {
                   const ds = payload.date || activeDate;
                   if (!next.daily[ds]) next.daily[ds] = {};
                   if (!next.daily[ds][mappedCat]) next.daily[ds][mappedCat] = {};
+                  if (mappedCat !== 'studies' && mappedCat !== 'habits' && mappedCat !== 'leisure' && mappedCat !== 'custom') {
+                     if (!next.categories) next.categories = [];
+                     if (!next.categories.find((c: any) => c.id === mappedCat)) {
+                         next.categories.push({ id: mappedCat, label: mappedCat.charAt(0).toUpperCase() + mappedCat.slice(1), icon: '◈', neon: '#00d4ff' });
+                     }
+                  }
                   
                   // make sure item exists in schema list
                   if (!next.items) next.items = {} as any;
@@ -1495,7 +1520,10 @@ export default function App() {
 
                   next.daily[ds][mappedCat][payload.item] = {
                       status: payload.status || 'done',
-                      reps: 1, hours: 0, satisfaction: 0, notes: payload.notes || ""
+                      reps: payload.reps !== undefined ? payload.reps : 1, 
+                      hours: payload.hours !== undefined ? payload.hours : 0, 
+                      satisfaction: 0, 
+                      notes: payload.notes || ""
                   };
               }
           } else if (type === 'EDIT_TRACKER') {
@@ -1512,20 +1540,34 @@ export default function App() {
               }
           } else if (type === 'SET_TRACKER_GOAL') {
              const mappedCat = getTargetCategory(payload.categoryId);
-             if (mappedCat && payload.item && payload.targetField) {
-                 const field = payload.targetField;
-                 const val = Math.max(0, Number(payload.value) || 0);
-
+             if (mappedCat && payload.item) {
                  if (!next.repsTarget) next.repsTarget = {};
                  if (!next.hoursTarget) next.hoursTarget = {};
+                 
+                 // If the item doesn't exist yet, we can create it
+                 if (!next.items) next.items = {} as any;
+                 if (!next.items[mappedCat]) next.items[mappedCat] = [];
+                 if (!next.items[mappedCat].includes(payload.item)) {
+                     next.items[mappedCat].push(payload.item);
+                 }
 
-                 const targetObj = field === "reps" ? { ...next.repsTarget } : { ...next.hoursTarget };
-                 if (!targetObj[mappedCat]) targetObj[mappedCat] = {};
-                 targetObj[mappedCat][payload.item] = val;
-
-                 next[field === "reps" ? "repsTarget" : "hoursTarget" as any] = targetObj;
+                 if (payload.reps !== undefined && payload.reps > 0) {
+                     if (!next.repsTarget[mappedCat]) next.repsTarget[mappedCat] = {};
+                     next.repsTarget[mappedCat][payload.item] = Number(payload.reps);
+                 }
+                 if (payload.hours !== undefined && payload.hours > 0) {
+                     if (!next.hoursTarget[mappedCat]) next.hoursTarget[mappedCat] = {};
+                     next.hoursTarget[mappedCat][payload.item] = Number(payload.hours);
+                 }
+                 
+                 if (mappedCat !== 'studies' && mappedCat !== 'habits' && mappedCat !== 'leisure' && mappedCat !== 'custom') {
+                     if (!next.categories) next.categories = [];
+                     if (!next.categories.find((c: any) => c.id === mappedCat)) {
+                         next.categories.push({ id: mappedCat, label: mappedCat.charAt(0).toUpperCase() + mappedCat.slice(1), icon: '◈', neon: '#00d4ff' });
+                     }
+                  }
              }
-         } else if (type === 'CREATE_REMINDER') {
+          } else if (type === 'CREATE_REMINDER') {
               if (!next.reminders) next.reminders = [];
               next.reminders.push({
                   id: payload.id || "rem_" + Date.now(),
@@ -1893,9 +1935,17 @@ export default function App() {
         specificInstructions = `
 ### DOMAIN FOCUS: MACRO GOALS & TARGET ATTRITION
 - **Objective**: Evaluate my long-term trajectory versus my actual short-term execution context.
-- **Deep Analysis**: Compare my defined \`goals\` against the raw execution data in \`daily\` and \`pomoSessions\`, while factoring in \`journals\` mood drops and \`finances\` boundaries.
+- **Deep Analysis**: Compare my defined \`goals\` and \`categories\` targets against the raw execution data in \`daily\` and \`pomoSessions\`, while factoring in \`journals\` mood drops and \`finances\` boundaries.
 - **Identify**: Where is the exact numerical gap between my ambition and my execution? Extrapolate failures mathematically. 
 - **Output**: Provide a strict, cross-correlated reality check on my goals. Give me a drastic multidimensional operational plan.
+`;
+      } else if (activeView === "projects") {
+        specificInstructions = `
+### DOMAIN FOCUS: PROJECT MANAGEMENT & TASK LISTS
+- **Objective**: Analyze my active complex projects and execution throughput.
+- **Deep Analysis**: Review my \`projects\` tasks, deadlines, and multi-stage completion percentages. Cross-correlate with my \`pomoSessions\` (actual deep work spent) and \`daily\` constraints.
+- **Identify**: Which projects are stagnating? Are multi-step project tasks blocking my daily habits? What patterns of completion exist across complex tasks vs simple routines?
+- **Output**: Output a highly actionable strategic project manager brief prioritizing the precise tasks to unblock my macro objectives today.
 `;
       } else if (activeView === "pomo") {
         specificInstructions = `
@@ -1926,9 +1976,11 @@ export default function App() {
       try {
         const cleanState = {
           Profile: focusData.profile,
-          Routine_Categories: focusData.categoryLabels || {},
+          Categories: focusData.categories || [],
           Journal_Tags: focusData.journalTags || [],
           Habit_Item_Templates: focusData.items || {},
+          Habit_Targets: { reps: focusData.repsTarget, hours: focusData.hoursTarget },
+          Recurring_Tasks: focusData.recurringTasks || {},
           Goals_Active: focusData.goals,
           Daily_Performance_Log: focusData.daily,
           Journal_Entries_And_Mood: focusData.journals,
@@ -1936,7 +1988,7 @@ export default function App() {
           Pomodoro_Focus_Sessions: focusData.pomoSessions,
           Reminders_And_Cognitive_Debt: focusData.reminders,
           Travel_Expeditions: focusData.expeditions,
-          Projects: (focusData as any).projects || [],
+          Projects: focusData.projects || [],
         };
         summaryText = JSON.stringify(cleanState, null, 2);
         if (summaryText.length > 150000) {
@@ -1955,15 +2007,16 @@ I am providing you with my personal real-world data exported directly from Omnil
 
 ### OMNILIFE TRACKER - SYSTEM ARCHITECTURE (HOW TO READ THE DATA):
 Omnilife Tracker is a comprehensive life-management engine. All my data is stored as a massive interconnected JSON tree. The modules are deeply interlocked:
-1. **Daily Tracker (\`Daily_Performance_Log\` / \`daily\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in.
+1. **Daily Tracker (\`Daily_Performance_Log\` / \`daily\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in. Target values mapped in \`Habit_Targets\`.
 2. **Daily Journal (\`Journal_Entries_And_Mood\` / \`journals\`)**: Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\`, text arrays, canvas sketches, and a list of \`audioTracks\` (each track holds \`src\` base64 audio, \`timestamp\` and voice text \`transcript\`). Since I can speak or log multiple voice logs/transcripts per day, analyze my mental state progression across these multiple speech records sequentially rather than treating them as a single prompt block. Crucial for psychological correlation and mood tracking.
 3. **Goals & Targets (\`Goals_Active\` / \`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Target \`reps\` and \`hours\` for specific tasks.
-4. **Finances (\`Financial_Ledger\` / \`finances\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & categorization.
-5. **Pomodoro Focus (\`Pomodoro_Focus_Sessions\` / \`pomoSessions\`)**: Focus timer logs with start/end timestamps.
+4. **Finances (\`Financial_Ledger\` / \`finances\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & precise time parsed from file imports (CSV, Excel) and Smart Text Imports (raw SMS/Text). Detailed categorization.
+5. **Pomodoro Focus (\`Pomodoro_Focus_Sessions\` / \`pomoSessions\`)**: Focus timer logs with start/end timestamps, tasks mapped, and ambient audio states.
 6. **Reminders (\`Reminders_And_Cognitive_Debt\` / \`reminders\`)**: Cognitive load, priority loops, and scheduled time-blocks.
-7. **Expeditions (\`Travel_Expeditions\` / \`expeditions\`)**: Tactical deployment tracking, location mapping, and payload logistics.
-8. **Knowledge Graph / The Priest**: The omni-view semantic layer. You MUST act as this node graph. When analyzing the JSON, build virtual edges connecting finances to journals to habits.
-9. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a 50 USD expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Create an expedition to Tokyo next week", "Set my mood to 5 for yesterday", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
+7. **Expeditions & Projects**: \`Travel_Expeditions\` holds tactical deployment tracking, location mapping, and payload logistics. \`Projects\` hold complex task lists.
+8. **Categories & Recurring Tasks**: Custom tracking structures and custom repeating behaviors mapping.
+8.1 **Knowledge Graph / The Priest**: The omni-view semantic layer. You MUST act as this node graph. When analyzing the JSON, build virtual edges connecting finances to journals to habits.
+9. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes in your output to help me optimize, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a $50 expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Create an expedition to Tokyo next week", "Change my goal for reading to 2 hours", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
 10. **System Sync Mechanisms**: I can synchronize my database of configurations, metrics, and logs completely offline either via **Ghost Sync** (instantly auto-writes the entire JSON to local disk pointer handle), **AirDrop WebRTC** (exchanges handshakes with other device nodes to synchronize database state directly), or **Bluetooth Link** (scans nearby close-range Bluetooth tokens). Suggest optimizations on how I should manage backups and device switches.
 
 ${specificInstructions}
@@ -2174,12 +2227,6 @@ ${summaryText}
 
   const pullFromCloud = async () => {
     if (syncCfg.provider === "none") return;
-    if (
-      !confirm(
-        "PULL DATABASE BACKUP?\nYour local un-synchronized changes will be completely overwritten.",
-      )
-    )
-      return;
     setIsSyncing(true);
     logSync("Pull initialized...");
 
@@ -2533,6 +2580,71 @@ ${summaryText}
         }
     }
     return appState.daily[ds][cat]![item];
+  };
+
+  const migrateYesterdayPending = () => {
+    const today = todayStr();
+    const d = new Date(today + "T00:00:00");
+    d.setDate(d.getDate() - 1);
+    const yestStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    
+    setAppState((prev) => {
+      const next = { ...prev };
+      let dailyNode = { ...next.daily };
+      const yestLog = dailyNode[yestStr] || {};
+      const todayLog = dailyNode[today] || {};
+      let migratedCount = 0;
+
+      // Ensure today object is initialized if we're adding stuff
+      let newTodayLog = { ...todayLog };
+      let newYestLog = { ...yestLog };
+
+      getAllCats(next).forEach(catObj => {
+        const cat = catObj.id;
+        if (newYestLog[cat]) {
+           Object.keys(newYestLog[cat]).forEach(item => {
+              const entry = newYestLog[cat][item];
+              // "pending" items from yesterday are implicitly "missed" by system
+              // So if they were pending, or they already were missed yesterday...
+              // Actually, user wants to move yesterday's "pending tasks" which means 
+              // tasks that were pending yesterday but now showed as missed today.
+              if (entry.status === 'pending' || entry.status === 'missed') {
+                  
+                  // Only migrate if they weren't explicitly done/skipped
+                  // We mark them skipped on yesterday
+                  newYestLog[cat][item] = { ...entry, status: 'skipped' };
+                  
+                  // Promote to today
+                  if (!newTodayLog[cat]) newTodayLog[cat] = {};
+                  // Set to pending if not already existing
+                  if (!newTodayLog[cat][item]) {
+                      newTodayLog[cat][item] = {
+                          status: 'pending',
+                          reps: next.repsTarget[cat]?.[item] ?? 1,
+                          hours: next.hoursTarget[cat]?.[item] ?? 1,
+                          satisfaction: 0,
+                          notes: ''
+                      };
+                  } else if (newTodayLog[cat][item].status === 'skipped' || newTodayLog[cat][item].status === 'missed') {
+                      newTodayLog[cat][item].status = 'pending';
+                  }
+                  migratedCount++;
+              }
+           });
+        }
+      });
+
+      if (migratedCount > 0) {
+        dailyNode[yestStr] = newYestLog;
+        dailyNode[today] = newTodayLog;
+        next.daily = dailyNode;
+        showToast(`MIGRATED ${migratedCount} PENDING ITEMS TO TODAY`, "ok");
+      } else {
+        showToast(`NO PENDING ITEMS FOUND YESTERDAY`, "nfo");
+      }
+
+      return next;
+    });
   };
 
   const updateDayField = (
@@ -3113,11 +3225,6 @@ ${summaryText}
   const handleImportJSONText = (rawStr: string) => {
     try {
       const parsed = JSON.parse(rawStr);
-      if (
-        confirm(
-          "Deploy backups merge? Existing profiles, checklists and checklist targets will merge cohesively.",
-        )
-      ) {
         setAppState((prev) => {
           // Merge checklists arrays
           const nextItems = { ...prev.items };
@@ -3187,29 +3294,20 @@ ${summaryText}
           };
 
           saveData(nextState);
-          return nextState;
-        });
-        showToast("DATA BACKUPS APPLIED ✓", "ok");
-      }
+        return nextState;
+      });
+      showToast("DATA BACKUPS APPLIED ✓", "ok");
     } catch (e) {
       alert("Corrupted JSON files. Overwrite failed.");
     }
   };
 
   const handleResetAll = () => {
-    if (
-      confirm(
-        "Perform factory database wipe out? Old logs, schedules, focus lists and targets parameters will be lost.",
-      )
-    ) {
-      if (confirm("Wiping out cannot be undone. Are you absolutely certain?")) {
-        localStorage.removeItem("lt_v5");
-        const empty = defData();
-        setAppState(empty);
-        saveData(empty);
-        showToast("FACILITY WIPED TO FACTORY BASE", "nfo");
-      }
-    }
+    localStorage.removeItem("lt_v5");
+    const empty = defData();
+    setAppState(empty);
+    saveData(empty);
+    showToast("FACILITY WIPED TO FACTORY BASE", "nfo");
   };
 
   const handleLoadDemo = () => {
@@ -3298,6 +3396,7 @@ ${summaryText}
             onRenameItem={renameItemInput}
             onUpdateCategoryLabel={handleUpdateCategoryLabel}
             onUpdateTargetFields={updateTargetFields}
+            onMigrateYesterday={migrateYesterdayPending}
             dayStats={dayStats}
             getRepsT={getRepsT}
             streak={calculateStreak}
@@ -3585,7 +3684,7 @@ ${summaryText}
                               notes: "Auto-logged from AI Journal Analysis",
                               category: act.category || "General",
                               currency: "USD",
-                              source: "user",
+                              source: "advanced",
                               type: act.type === "credit" || act.type === "income" ? "credit" : "debit",
                               counterparty: "General"
                            });
@@ -3607,13 +3706,13 @@ ${summaryText}
                         }
 
                         if (foundItem) {
-                           const key = `${foundCatId}_${foundItem}`;
-                           const existing = next.daily[targetD][key] || { status: 'none', reps: 0, hours: 0, notes: '', satisfaction: 5 };
-                           next.daily[targetD][key] = {
+                           if (!next.daily[targetD][foundCatId]) next.daily[targetD][foundCatId] = {};
+                           const existing = next.daily[targetD][foundCatId][foundItem] || { status: 'pending', reps: 0, hours: 0, notes: '', satisfaction: 5 };
+                           next.daily[targetD][foundCatId][foundItem] = {
                               ...existing,
                               status: 'done',
-                              reps: existing.reps + (parseInt(act.reps) || 0),
-                              hours: existing.hours + (parseFloat(act.hours) || 0)
+                              reps: (existing.reps as number) + (parseInt(act.reps) || 0),
+                              hours: (existing.hours as number) + (parseFloat(act.hours) || 0)
                            };
                         }
                      } else if (act.module === "goals") {
@@ -3749,7 +3848,7 @@ ${summaryText}
         );
       case "ai_analyst":
         return (
-          <AiAnalystView onGeneratePrompt={(module) => {
+          <AiAnalystView state={appState} onGeneratePrompt={(module) => {
               // Per User Request: Always feed purely all interrelated data for maximum cross-referencing capabilities
               const focusData = appState;
               let specificInstructions = "";
@@ -3832,9 +3931,11 @@ ${summaryText}
                 // Curate a clean, 360-degree view of the user's data by omitting noisy app states
                 const cleanState = {
                   Profile: focusData.profile,
-                  Routine_Categories: focusData.categoryLabels || {},
+                  Categories: focusData.categories || [],
                   Journal_Tags: focusData.journalTags || [],
                   Habit_Item_Templates: focusData.items || {},
+                  Habit_Targets: { reps: focusData.repsTarget, hours: focusData.hoursTarget },
+                  Recurring_Tasks: focusData.recurringTasks || {},
                   Goals_Active: focusData.goals,
                   Daily_Performance_Log: focusData.daily,
                   Journal_Entries_And_Mood: focusData.journals,
@@ -3842,7 +3943,7 @@ ${summaryText}
                   Pomodoro_Focus_Sessions: focusData.pomoSessions,
                   Reminders_And_Cognitive_Debt: focusData.reminders,
                   Travel_Expeditions: focusData.expeditions,
-                  Projects: (focusData as any).projects || [],
+                  Projects: focusData.projects || [],
                 };
                 summaryText = JSON.stringify(cleanState, null, 2);
                 if (summaryText.length > 500000) {
@@ -3861,15 +3962,16 @@ I am providing you with my personal real-world data exported directly from Omnil
 
 ### OMNILIFE TRACKER - SYSTEM ARCHITECTURE (HOW TO READ THE DATA)
 Omnilife Tracker is a comprehensive life-management engine. All my data is stored as a massive interconnected JSON tree. The modules are deeply interlocked:
-1. **Daily Tracker (\`Daily_Performance_Log\` / \`daily\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in.
+1. **Daily Tracker (\`Daily_Performance_Log\` / \`daily\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in. Target values mapped in \`Habit_Targets\`.
 2. **Daily Journal (\`Journal_Entries_And_Mood\` / \`journals\`)**: Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\`, text arrays, canvas sketches, and a list of \`audioTracks\` (each track holds \`src\` base64 audio, \`timestamp\` and voice text \`transcript\`). Since I can speak or log multiple voice logs/transcripts per day, analyze my mental state progression across these multiple speech records sequentially rather than treating them as a single prompt block. Crucial for psychological correlation and mood tracking.
 3. **Goals & Targets (\`Goals_Active\` / \`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Target \`reps\` and \`hours\` for specific tasks.
 4. **Finances (\`Financial_Ledger\` / \`finances\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & precise time parsed from file imports (CSV, Excel) and Smart Text Imports (raw SMS/Text). Detailed categorization.
 5. **Pomodoro Focus (\`Pomodoro_Focus_Sessions\` / \`pomoSessions\`)**: Focus timer logs with start/end timestamps, tasks mapped, and ambient audio states.
 6. **Reminders (\`Reminders_And_Cognitive_Debt\` / \`reminders\`)**: Cognitive load tracking (alerts, recurring loops).
-7. **Expeditions (\`Travel_Expeditions\` / \`expeditions\`)**: Logistics and packing arrays.
-8. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes in your output to help me optimize, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a $50 expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Set my mood to 5 for yesterday", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
-9. **System Sync Mechanisms**: I can synchronize my database of configurations, metrics, and logs completely offline either via **Ghost Sync** (instantly auto-writes the entire JSON to local disk pointer handle), **AirDrop WebRTC** (exchanges handshakes with other device nodes to synchronize database state directly), or **Bluetooth Link** (scans nearby close-range Bluetooth tokens). Suggest optimizations on how I should manage backups and device switches.
+7. **Expeditions & Projects**: \`Travel_Expeditions\` holds logistics and packing arrays. \`Projects\` hold complex task lists.
+8. **Categories & Recurring Tasks**: Custom tracking structures and custom repeating behaviors mapping.
+9. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes in your output to help me optimize, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a $50 expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Set my mood to 5 for yesterday", "Change my goal for reading to 2 hours", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
+10. **System Sync Mechanisms**: I can synchronize my database of configurations, metrics, and logs completely offline either via **Ghost Sync** (instantly auto-writes the entire JSON to local disk pointer handle), **AirDrop WebRTC** (exchanges handshakes with other device nodes to synchronize database state directly), or **Bluetooth Link** (scans nearby close-range Bluetooth tokens). Suggest optimizations on how I should manage backups and device switches.
 
 ${specificInstructions}
  

@@ -97,10 +97,8 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Delete this reminder?')) {
-      onDeleteReminder(id);
-      setShowModal(false);
-    }
+    onDeleteReminder(id);
+    setShowModal(false);
   };
 
   // List calculations

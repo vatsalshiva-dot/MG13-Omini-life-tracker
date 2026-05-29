@@ -11,9 +11,17 @@ export const CATS: { id: TrackerCategory; label: string; icon: string; neon: str
   { id: 'custom', label: 'Custom', icon: '◎', neon: '#aa44ff' },
 ];
 
+export function getAllCats(state?: AppState | null) {
+  const base = [...CATS];
+  if (state?.categories && Array.isArray(state.categories)) {
+     base.push(...state.categories);
+  }
+  return base;
+}
+
 export function getCatLabel(state: AppState | undefined | null, catId: TrackerCategory): string {
-  if (state?.categoryLabels?.[catId]) return state.categoryLabels[catId] as string;
-  return CATS.find(c => c.id === catId)?.label || catId;
+  if (state?.categoryLabels?.[catId]) return state.categoryLabels[catId];
+  return getAllCats(state).find(c => c.id === catId)?.label || catId;
 }
 
 export function initCG() {

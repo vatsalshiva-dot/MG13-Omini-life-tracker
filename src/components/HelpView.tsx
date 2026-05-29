@@ -17,7 +17,7 @@ Omnilife Tracker is powered by an **Ultimate Local AI System**. It is a 100% loc
 **Detailed Module Capabilities:**
 1. **Dashboard:** Summarizes the current day. Integrates streak progression, total hours tracked, and any overdue alerts. Serves as the central command node.
 2. **Daily Tracker:** The core checklist. Users can check off recurring items (Done, Missed, Skipped). Users can link Quick Notes and exact numeric measurements to actions. Has a streak calculator for continuous consistency.
-3. **Daily Journal:** Deep narrative logging. Captures Mood (1-5 scale) and Energy (1-5 scale), specific tags, inline GPS location tracking, and text prompts. Supports inline sketching and uploading images onto the daily log.
+3. **Daily Journal:** Deep narrative logging. Captures Mood (1-5 scale) and Energy (1-5 scale), specific tags, inline GPS location tracking, and text prompts. Supports inline sketching and uploading images onto the daily log. Saves an array of Voice Dictation Audio Tracks with precise transcriptions and timestamps.
 4. **Goals & Targets:** Users can set target repetitions or hours per activity over distinct timeframes (Weekly, Monthly, Yearly, Lifetime). The app intercepts Daily Tracker and Pomodoro logs to auto-calculate completion percentage towards these goals.
 5. **Analytics (Graph Matrix):** Shows bar/line charts over past week, plus an elegant heatmap of 30 days to visualize density of activity visually.
 6. **Expeditions:** A comprehensive trip planner logging itineraries, precise map coordinates, budgets per trip, and active packing checklists.
@@ -31,9 +31,11 @@ Omnilife Tracker is powered by an **Ultimate Local AI System**. It is a 100% loc
 14. **Bio-Climate & Indoor/Outdoor Environment Desk:** Real-time environmental tracking console on the dashboard. Monitors live weather conditions, wind speed, UV, and Air Quality (AQI) telemetry.
 15. **Visual Themes, Custom Stickers & Quotes Engines:** Includes 22 advanced visual presets styled with distinctive color tones, typographic matching engines, and distinct situational quotes.
 16. **Voice Logger / Omnimodal (OmniLife Command):** The app accepts voice or text input and uses an AI endpoint to map intentions into structured system commands. This includes creating/editing/deleting goals, reminders, daily tracker hits, finances, or adjusting journal metrics (mood/energy/tags). Crucially, BEFORE any action executes, the app displays the **OmniLife Log Deck (Management Phase)**. The user can review, edit, discard, or manually type out specifics of the interpreted system actions on-screen.
+17. **Projects:** Advanced complex task management supporting multi-stage task lists, progress completion algorithms, mapping, and embedded deadline/description features.
+18. **Custom Categories & Advanced Targets:** Complete control mapping of any habit category with distinct default target values (reps/hours) and recurring schedule configuration options.
 
 **Your Ongoing AI Role:**
-Whenever I provide data outputs from Omnilife Tracker or ask you a question in this context, use your mastery of these 16 modules to assist me. Your guidance MUST adhere to the app's structural constraints (e.g. knowing it's offline-first, knowing how the ensemble architecture routes data). 
+Whenever I provide data outputs from Omnilife Tracker or ask you a question in this context, use your mastery of these 18 modules to assist me. Your guidance MUST adhere to the app's structural constraints (e.g. knowing it's offline-first, knowing how the ensemble architecture routes data). 
 - Help me design life schedules.
 - Guide me in utilizing specific modules for my use-case.
 - Perform deep-dive analysis on any metrics or journal logs I provide.

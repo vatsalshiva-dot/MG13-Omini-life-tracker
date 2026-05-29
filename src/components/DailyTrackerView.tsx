@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppState, TrackerCategory, DayEntry, TrackerStatus } from '../types';
-import { fmtDate, getWeek } from '../utils/date';
-import {  CATS , getCatLabel } from '../utils/storage';
+import { fmtDate, getWeek, todayStr } from '../utils/date';
+import {  CATS, getAllCats , getCatLabel } from '../utils/storage';
 import { Play, Square, Plus, Sparkles, Flame, Check, X, HelpCircle, CornerDownRight, Edit2, Mic, MicOff, Loader } from 'lucide-react';
 
 interface DailyTrackerViewProps {
@@ -17,6 +17,7 @@ interface DailyTrackerViewProps {
   onRenameItem?: (cat: TrackerCategory, oldItem: string, newItem: string) => void;
   onUpdateCategoryLabel?: (cat: TrackerCategory, label: string) => void;
   onUpdateTargetFields?: (cat: TrackerCategory, item: string, field: "reps" | "hours", val: number) => void;
+  onMigrateYesterday?: () => void;
   onOpenAIAnalyst?: () => void;
   dayStats: (ds: string) => {
     done: number;
@@ -61,6 +62,7 @@ export const DailyTrackerView: React.FC<DailyTrackerViewProps> = ({
   onRenameItem,
   onUpdateCategoryLabel,
   onUpdateTargetFields,
+  onMigrateYesterday,
   onOpenAIAnalyst,
   dayStats,
   getRepsT,
@@ -84,7 +86,8 @@ export const DailyTrackerView: React.FC<DailyTrackerViewProps> = ({
   const [trackerMode, setTrackerMode] = useState<'track' | 'goal'>('track');
 
   const stats = dayStats(date);
-  const currentCategory = CATS.find(c => c.id === activeTab) || CATS[0];
+  const allCats = getAllCats(state);
+  const currentCategory = allCats.find(c => c.id === activeTab) || allCats[0];
   const items = state.items[activeTab] || [];
   const weekDays = getWeek(date);
 
@@ -119,7 +122,7 @@ export const DailyTrackerView: React.FC<DailyTrackerViewProps> = ({
         </div>
 
         {/* Controls */}
-        <div className="flex flex-col sm:flex-row items-center gap-3">
+        <div className="flex flex-col sm:flex-row flex-wrap items-center gap-3">
           {/* Date navigators */}
           <div className="flex items-center gap-2 bg-[#111120] border border-[#2a2a50] p-1.5 rounded-xl font-mono">
             <button 
@@ -297,7 +300,7 @@ export const DailyTrackerView: React.FC<DailyTrackerViewProps> = ({
 
       {/* Tabs */}
       <div className="flex gap-2 bg-[#111120] p-2 border border-[#2a2a50] rounded-2xl overflow-x-auto scrollbar-none shadow-sm">
-        {CATS.map((cat) => {
+        {allCats.map((cat) => {
           const catItems = state.items[cat.id] || [];
           const countDone = catItems.filter(it => getDayD(date, cat.id, it).status === 'done').length;
 

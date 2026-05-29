@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, TrackerCategory, JournalEntry, Reminder, JournalPrompt } from '../types';
 import { fmtShort, fmtDate, todayStr } from '../utils/date';
-import { CATS } from '../utils/storage';
+import { CATS, getAllCats, getCatLabel } from '../utils/storage';
 import { PriestEngine } from '../utils/priestEngine';
 import { 
   Plus, Trash2, Edit3, Settings, Bell, Calendar, CheckSquare, 
@@ -62,6 +62,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [aiActionsModal, setAiActionsModal] = useState<{ isOpen: boolean; actions: any[]; pendingAudio?: string; pendingTranscript?: string }>({ isOpen: false, actions: [] });
   const [omniModal, setOmniModal] = useState<{ isOpen: boolean; data: any | null; pendingAudio?: string; pendingTranscript?: string }>({ isOpen: false, data: null });
   const [alertModal, setAlertModal] = useState<{ message: string; title: string } | null>(null);
+  const [infoModal, setInfoModal] = useState<{ isOpen: boolean; proceedAction: (() => void) | null }>({ isOpen: false, proceedAction: null });
 
   const alert = (message: string) => {
     let title = "System Notification";
@@ -88,7 +89,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     savedAt: ''
   };
 
-  const handleAiAutoLog = async () => {
+  const runAiAutoLog = async () => {
     const completeText = state.journalPrompts
       .map(p => {
          const val = entry.sections[p.id]?.trim();
@@ -109,23 +110,14 @@ export const JournalView: React.FC<JournalViewProps> = ({
     }, 500);
     
     try {
-      const response = await fetch('/api/analyze-journal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: completeText,
-          localTime: new Date().toISOString()
-        })
-      });
+      const { parseMutationsLocally } = await import('../lib/ai/CommandParser');
+      const data = parseMutationsLocally(completeText, {
+          categories: getAllCats(state),
+          items: state.items,
+          journalPrompts: state.journalPrompts
+      }, today);
 
-      if (!response.ok) {
-         const errData = await response.json().catch(() => null);
-         throw new Error(errData?.error || 'Failed to analyze journal.');
-      }
-      
-      const data = await response.json();
-      
-      if (!data.actions || data.actions.length === 0) {
+      if (!data.mutations || data.mutations.length === 0) {
         alert("No clear actions detected to log.");
         clearInterval(interval);
         setIsAiAnalyzing(false);
@@ -136,13 +128,21 @@ export const JournalView: React.FC<JournalViewProps> = ({
       setAiPercent(100);
       setTimeout(() => {
           setIsAiAnalyzing(false);
-          setAiActionsModal({ isOpen: true, actions: data.actions || [] });
+          setOmniModal({ isOpen: true, data: data });
       }, 400);
     } catch (e: any) {
       clearInterval(interval);
       setIsAiAnalyzing(false);
       alert("Error reaching AI Analyst: " + e.message);
     }
+  };
+
+  const handleAiAutoLog = async () => {
+    if (!localStorage.getItem('omniAutoLogInfoSeen')) {
+      setInfoModal({ isOpen: true, proceedAction: runAiAutoLog });
+      return;
+    }
+    runAiAutoLog();
   };
 
   const dailyProgress = dayStats(today);
@@ -320,7 +320,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     }
   };
 
-  const handleExecuteOmniCommand = async () => {
+  const runExecuteOmniCommand = async () => {
      if (isVoiceRecording) {
         stopVoiceAndTracks();
      }
@@ -333,29 +333,19 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
      setIsProcessingVoice(true);
      try {
-        const res = await fetch('/api/omni-command', {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({
-              text: finalText,
-              stateContext: {
-                 categories: state.categories,
-                 items: state.items,
-                 journalPrompts: state.journalPrompts
-              },
-              today: new Date().toISOString()
-           })
-        });
-        
-        if (!res.ok) throw new Error("Omni Engine failed mapping actions");
-        const data = await res.json();
-        
+        const { parseMutationsLocally } = await import('../lib/ai/CommandParser');
+        const data = parseMutationsLocally(finalText, {
+           categories: getAllCats(state),
+           items: state.items,
+           journalPrompts: state.journalPrompts
+        }, today);
+
         setOmniModal({ 
            isOpen: true, 
            data: data,
            pendingTranscript: finalText
         });
-
+        
         setAccumulatedTranscript('');
         baseTranscriptRef.current = '';
         
@@ -365,6 +355,14 @@ export const JournalView: React.FC<JournalViewProps> = ({
      } finally {
          setIsProcessingVoice(false);
      }
+  };
+
+  const handleExecuteOmniCommand = async () => {
+    if (!localStorage.getItem('omniAutoLogInfoSeen')) {
+      setInfoModal({ isOpen: true, proceedAction: runExecuteOmniCommand });
+      return;
+    }
+    runExecuteOmniCommand();
   };
 
   const handleAiAutoLogForced = async (overrideSections: any, overridePrompts: any) => {
@@ -385,19 +383,14 @@ export const JournalView: React.FC<JournalViewProps> = ({
     }, 500);
     
     try {
-      const response = await fetch('/api/analyze-journal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: completeText,
-          localTime: new Date().toISOString()
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to analyze journal.');
-      const data = await response.json();
+      const { parseMutationsLocally } = await import('../lib/ai/CommandParser');
+      const data = parseMutationsLocally(completeText, {
+          categories: getAllCats(state),
+          items: state.items,
+          journalPrompts: state.journalPrompts
+      }, new Date().toISOString());
       
-      if (!data.actions || data.actions.length === 0) {
+      if (!data.mutations || data.mutations.length === 0) {
         clearInterval(interval);
         setIsAiAnalyzing(false);
         return;
@@ -407,7 +400,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
       setAiPercent(100);
       setTimeout(() => {
           setIsAiAnalyzing(false);
-          setAiActionsModal({ isOpen: true, actions: data.actions || [] });
+          setOmniModal({ isOpen: true, data: data });
       }, 400);
     } catch (e: any) {
       clearInterval(interval);
@@ -587,12 +580,9 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
   const handleDeletePrompt = (id: string) => {
     if (state.journalPrompts.length <= 1) {
-      alert('Keep at least one heading section so you can write!');
       return;
     }
-    if (confirm('Delete this journal heading? Your text for this heading on old entries is saved, but the input section will be removed.')) {
-      onUpdateJournalPrompts(state.journalPrompts.filter(p => p.id !== id));
-    }
+    onUpdateJournalPrompts(state.journalPrompts.filter(p => p.id !== id));
   };
 
   const handleMovePrompt = (index: number, direction: 'up' | 'down') => {
@@ -933,6 +923,18 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
           {/* Dynamic Prompts / Custom Headings */}
           <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 space-y-4">
+            {entry.audioTracks && entry.audioTracks.length > 0 && (
+               <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl space-y-3">
+                  <h3 className="text-[10px] font-bold text-purple-400 uppercase tracking-widest font-mono">
+                     Saved Audio Tracks ({entry.audioTracks.length})
+                  </h3>
+                  <div className="flex flex-col gap-2">
+                     {entry.audioTracks.map((trk, i) => (
+                        <audio key={i} src={trk.url} controls className="w-full h-8 opacity-80" />
+                     ))}
+                  </div>
+               </div>
+            )}
             <div className="flex items-center justify-between border-b border-[#1e1e38] pb-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2 font-mono">
                 <Edit3 size={14} className="text-[#ff6b1a]" />
@@ -1042,6 +1044,28 @@ export const JournalView: React.FC<JournalViewProps> = ({
                       placeholder={isTomorrow ? p.placeholder.replace(/\btoday\b/gi, match => match === 'Today' ? 'Tomorrow' : 'tomorrow') : p.placeholder}
                       value={textVal}
                       onChange={(e) => handleSectionChange(p.id, e.target.value)}
+                      onFocus={(e) => {
+                        if (!textVal.trim()) {
+                          const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          handleSectionChange(p.id, `[${ts}] `);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          const target = e.target as HTMLTextAreaElement;
+                          const start = target.selectionStart;
+                          const end = target.selectionEnd;
+                          const val = target.value;
+                          const newVal = val.substring(0, start) + `\n[${ts}] ` + val.substring(end);
+                          handleSectionChange(p.id, newVal);
+                          // Set cursor position after the state updates
+                          setTimeout(() => {
+                            target.selectionStart = target.selectionEnd = start + ts.length + 4;
+                          }, 10);
+                        }
+                      }}
                       onBlur={(e) => {
                         const val = e.target.value.trim();
                         if (val && !/^\[\d{1,2}:\d{2}/.test(val)) {
@@ -1830,9 +1854,11 @@ export const JournalView: React.FC<JournalViewProps> = ({
               </p>
             </div>
             
-            <div className="max-h-[420px] overflow-y-auto space-y-3 mb-6 pr-1 scrollbar-none">
+            <div className="max-h-[50vh] sm:max-h-[420px] overflow-y-auto space-y-3 mb-6 pr-1 scrollbar-none">
               {(omniModal.data.mutations || []).map((mut: any, i: number) => {
                 const isGoal = mut.type === "CREATE_GOAL";
+                const isCreateCategory = mut.type === "CREATE_CATEGORY";
+                const isCreateTrackerItem = mut.type === "CREATE_TRACKER_ITEM";
                 const isLogTracker = mut.type === "LOG_TRACKER";
                 const isEditTracker = mut.type === "EDIT_TRACKER";
                 const isSetTrackerGoal = mut.type === "SET_TRACKER_GOAL";
@@ -1857,12 +1883,85 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     </button>
                     
                     <div className="flex items-center gap-1.5 mb-2">
-                       <span className="bg-[#ff00a0]/10 text-[#ff00a0] border border-[#ff00a0]/30 text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full font-mono">
+                       <span className={`text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full font-mono border ${isSetTrackerGoal ? 'bg-amber-500/10 text-amber-500 border-amber-500/30' : isFinance ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : isGoal ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30' : 'bg-[#ff00a0]/10 text-[#ff00a0] border-[#ff00a0]/30'}`}>
                          {mut.type.replace(/_/g, ' ')}
                        </span>
                     </div>
 
                     <div className="text-xs text-slate-300 font-mono space-y-3 pt-2">
+                      {mut.payload && (
+                        <div className="flex flex-col gap-0.5 mt-2 mb-3">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Date (defaults to today if empty)</label>
+                            <input
+                              type="date"
+                              value={mut.payload.date || mut.date || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.date = e.target.value;
+                                 nextMuts[i].date = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                        </div>
+                      )}
+                      
+                      {/* CREATE_CATEGORY */}
+                      {isCreateCategory && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5 col-span-2">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Category Name</label>
+                            <input
+                              type="text"
+                              value={mut.payload.label || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.label = e.target.value;
+                                 nextMuts[i].payload.id = e.target.value.toLowerCase().replace(/\s+/g, '_');
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* CREATE_TRACKER_ITEM */}
+                      {mut.type === "CREATE_TRACKER_ITEM" && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Category</label>
+                            <select
+                              value={mut.payload.categoryId || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.categoryId = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            >
+                              <option value="">-- Category --</option>
+                              {getAllCats(state).map((cat: any) => (
+                                <option key={cat.id} value={cat.id}>{cat.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Task / Habit Name</label>
+                            <input
+                              type="text"
+                              value={mut.payload.item || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.item = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       {/* CREATE_GOAL */}
                       {isGoal && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1923,7 +2022,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                               className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
                             >
                               <option value="">-- Category --</option>
-                              {state.categories?.map((cat: any) => (
+                              {getAllCats(state).map((cat: any) => (
                                 <option key={cat.id} value={cat.id}>{cat.label}</option>
                               ))}
                             </select>
@@ -1957,6 +2056,35 @@ export const JournalView: React.FC<JournalViewProps> = ({
                               <option value="skipped">Skipped</option>
                             </select>
                           </div>
+                          
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Reps / Amount</label>
+                            <input
+                              type="number"
+                              value={mut.payload.reps || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.reps = e.target.value ? Number(e.target.value) : undefined;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Hours / Duration</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={mut.payload.hours || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.hours = e.target.value ? Number(e.target.value) : undefined;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            />
+                          </div>
+
                           <div className="flex flex-col gap-0.5 col-span-2">
                             <label className="text-[9px] text-slate-500 font-bold uppercase">Notes</label>
                             <input
@@ -2023,8 +2151,26 @@ export const JournalView: React.FC<JournalViewProps> = ({
                       {/* SET_TRACKER_GOAL */}
                       {isSetTrackerGoal && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div className="flex flex-col gap-0.5 col-span-2">
-                            <label className="text-[9px] text-slate-500 font-bold uppercase">Habit Name</label>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Category</label>
+                            <select
+                              value={mut.payload.categoryId || ''}
+                              onChange={(e) => {
+                                 const nextMuts = [...omniModal.data.mutations];
+                                 nextMuts[i].payload.categoryId = e.target.value;
+                                 setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
+                              }}
+                              className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
+                            >
+                              <option value="">-- Category --</option>
+                              {getAllCats(state).map((cat: any) => (
+                                <option key={cat.id} value={cat.id}>{cat.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Habit / Task Name</label>
                             <input
                               type="text"
                               value={mut.payload.item || ''}
@@ -2036,29 +2182,29 @@ export const JournalView: React.FC<JournalViewProps> = ({
                               className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
                             />
                           </div>
+
                           <div className="flex flex-col gap-0.5">
-                            <label className="text-[9px] text-slate-500 font-bold uppercase">Target Field</label>
-                            <select
-                              value={mut.payload.targetField || 'reps'}
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Target Reps</label>
+                            <input
+                              type="number"
+                              value={mut.payload.reps || ''}
                               onChange={(e) => {
                                  const nextMuts = [...omniModal.data.mutations];
-                                 nextMuts[i].payload.targetField = e.target.value;
+                                 nextMuts[i].payload.reps = e.target.value ? Number(e.target.value) : undefined;
                                  setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
                               }}
                               className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
-                            >
-                              <option value="reps">Reps (Count)</option>
-                              <option value="hours">Hours (Duration)</option>
-                            </select>
+                            />
                           </div>
                           <div className="flex flex-col gap-0.5">
-                            <label className="text-[9px] text-slate-500 font-bold uppercase">Goal Target Value</label>
+                            <label className="text-[9px] text-slate-500 font-bold uppercase">Target Hours</label>
                             <input
                               type="number"
-                              value={mut.payload.value || 0}
+                              step="0.1"
+                              value={mut.payload.hours || ''}
                               onChange={(e) => {
                                  const nextMuts = [...omniModal.data.mutations];
-                                 nextMuts[i].payload.value = Number(e.target.value);
+                                 nextMuts[i].payload.hours = e.target.value ? Number(e.target.value) : undefined;
                                  setOmniModal({ ...omniModal, data: { ...omniModal.data, mutations: nextMuts } });
                               }}
                               className="bg-[#111120] border border-[#1e1e38] rounded p-1.5 text-slate-200 outline-none focus:border-[#ff00a0] w-full"
@@ -2232,7 +2378,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                       )}
 
                       {/* Fallback for other mutations */}
-                      {!isGoal && !isLogTracker && !isEditTracker && !isSetTrackerGoal && !isReminder && !isFinance && !isAppendJournal && !isJournalMetrics && (
+                      {!isGoal && !isCreateCategory && !isCreateTrackerItem && !isLogTracker && !isEditTracker && !isSetTrackerGoal && !isReminder && !isFinance && !isAppendJournal && !isJournalMetrics && (
                         <div>
                           {Object.keys(mut.payload).map(k => {
                              if (k === 'id') return null;
@@ -2338,6 +2484,54 @@ export const JournalView: React.FC<JournalViewProps> = ({
                   className="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600/35 text-rose-400 border border-rose-500/40 rounded-xl text-xs font-black uppercase tracking-widest transition cursor-pointer"
                 >
                   Dismiss Notice
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INFO MODAL OVERLAY */}
+      {infoModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#111120] border border-[#00ff88]/40 rounded-2xl p-6 w-full max-w-lg shadow-[0_0_50px_rgba(0,255,136,0.15)] relative">
+            <button 
+              onClick={() => setInfoModal({ isOpen: false, proceedAction: null })}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+            >
+              <X size={16} />
+            </button>
+            <div className="space-y-4">
+              <div className="mx-auto w-14 h-14 rounded-full bg-[#00ff88]/10 border border-[#00ff88]/30 flex items-center justify-center text-[#00ff88] text-2xl font-bold animate-pulse">
+                <Brain size={24} />
+              </div>
+              <h3 className="text-xl font-black text-center text-white font-display tracking-wider uppercase">
+                Omni AI Analyst
+              </h3>
+              <p className="text-sm text-slate-300 leading-relaxed font-mono">
+                The Omni AI has advanced capabilities which allow it to automatically manage your tasks, finances, journal entries, and life trackers seamlessly across your daily hub.
+              </p>
+              <div className="bg-[#080811] p-3.5 rounded-xl border border-[#1e1e38] space-y-2 text-xs font-mono">
+                <h4 className="text-[#00ff88] font-bold uppercase tracking-widest text-[10px] mb-2 border-b border-[#1e1e38] pb-1">Features</h4>
+                <ul className="text-slate-400 space-y-1.5 ml-2 list-disc pl-2">
+                  <li><strong className="text-white">Auto-Check Tasks:</strong> Detects when you say "Did mindfulness" or "Finished reading" and marks the habit as done.</li>
+                  <li><strong className="text-white">Log Finances:</strong> Captures expenses like "Bought coffee for $5" natively into your budget ledger.</li>
+                  <li><strong className="text-white">Smart Reminders:</strong> Creates actual application reminders from "Remind me to call mom".</li>
+                  <li><strong className="text-white">Deep Context:</strong> Dynamically interprets reflection texts and extracts multi-action payloads locally entirely offline!</li>
+                  <li><strong className="text-white">Journal Append:</strong> For generic thoughts that don't match specific trackers, intelligently appends them securely.</li>
+                </ul>
+              </div>
+              <div className="pt-3">
+                <button
+                  onClick={() => {
+                    localStorage.setItem('omniAutoLogInfoSeen', 'true');
+                    const action = infoModal.proceedAction;
+                    setInfoModal({ isOpen: false, proceedAction: null });
+                    if (action) action();
+                  }}
+                  className="w-full py-3 bg-[#00ff88] hover:bg-emerald-400 text-[#0d0d1a] font-extrabold tracking-widest text-[11px] rounded-xl uppercase transition cursor-pointer select-none"
+                >
+                  I Understand, Activate Omni AI
                 </button>
               </div>
             </div>
