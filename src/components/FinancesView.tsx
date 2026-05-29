@@ -97,6 +97,7 @@ export const FinancesView: React.FC<{
   const [isGoalsExpanded, setIsGoalsExpanded] = useState(true);
   const [isBudgetsExpanded, setIsBudgetsExpanded] = useState(false);
   const [isRemindersExpanded, setIsRemindersExpanded] = useState(false);
+  const [goalsTab, setGoalsTab] = useState<'d' | 'w' | 'm' | 'y'>('d');
 
   // Editing state for financial logs
   const [editingTx, setEditingTx] = useState<ExpeditionExpense | null>(null);
@@ -1083,6 +1084,18 @@ Prepend or include this command string clearly before your code block:
     });
   };
 
+  const updateIncomeTarget = (field: "d" | "w" | "m" | "y", val: string) => {
+    setAppState((prev: AppState) => {
+      const currentTargets = prev.financeIncomeTargets || { d: 0, w: 0, m: 0, y: 0 };
+      const next = {
+        ...prev,
+        financeIncomeTargets: { ...currentTargets, [field]: parseFloat(val) || 0 },
+      };
+      saveData(next);
+      return next;
+    });
+  };
+
   const handleSetReminder = (e: ExpeditionExpense, mode: "reminder" | "alert") => {
     setReminderModal({
       isOpen: true,
@@ -1125,6 +1138,56 @@ Prepend or include this command string clearly before your code block:
   };
 
   const todayStr = new Date().toISOString().split("T")[0];
+
+  const isSameWeek = (date1Str: string, date2Str: string) => {
+    try {
+      const d1 = new Date(date1Str);
+      const d2 = new Date(date2Str);
+      if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return false;
+      const day2 = d2.getDay();
+      const diff = d2.getDate() - day2 + (day2 === 0 ? -6 : 1);
+      const mon2 = new Date(d2);
+      mon2.setDate(diff);
+      mon2.setHours(0, 0, 0, 0);
+      const sun2 = new Date(mon2);
+      sun2.setDate(mon2.getDate() + 6);
+      sun2.setHours(23, 59, 59, 999);
+      const t1 = d1.getTime();
+      return t1 >= mon2.getTime() && t1 <= sun2.getTime();
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const periodicActuals = React.useMemo(() => {
+    const list = state.finances || [];
+    
+    // Day
+    const dayInc = list.filter(e => e.date === todayStr && (e.type === 'income' || e.type === 'credit')).reduce((sum, e) => sum + Number(e.amount), 0);
+    const dayExp = list.filter(e => e.date === todayStr && (!e.type || e.type === 'expense' || e.type === 'debit' || e.type === 'loan_given')).reduce((sum, e) => sum + Number(e.amount), 0);
+    
+    // Week
+    const weekInc = list.filter(e => isSameWeek(e.date, todayStr) && (e.type === 'income' || e.type === 'credit')).reduce((sum, e) => sum + Number(e.amount), 0);
+    const weekExp = list.filter(e => isSameWeek(e.date, todayStr) && (!e.type || e.type === 'expense' || e.type === 'debit' || e.type === 'loan_given')).reduce((sum, e) => sum + Number(e.amount), 0);
+    
+    // Month
+    const mPrefix = todayStr.slice(0, 7);
+    const monthInc = list.filter(e => e.date.startsWith(mPrefix) && (e.type === 'income' || e.type === 'credit')).reduce((sum, e) => sum + Number(e.amount), 0);
+    const monthExp = list.filter(e => e.date.startsWith(mPrefix) && (!e.type || e.type === 'expense' || e.type === 'debit' || e.type === 'loan_given')).reduce((sum, e) => sum + Number(e.amount), 0);
+    
+    // Year
+    const yPrefix = todayStr.slice(0, 4);
+    const yearInc = list.filter(e => e.date.startsWith(yPrefix) && (e.type === 'income' || e.type === 'credit')).reduce((sum, e) => sum + Number(e.amount), 0);
+    const yearExp = list.filter(e => e.date.startsWith(yPrefix) && (!e.type || e.type === 'expense' || e.type === 'debit' || e.type === 'loan_given')).reduce((sum, e) => sum + Number(e.amount), 0);
+    
+    return {
+      d: { income: dayInc, expense: dayExp },
+      w: { income: weekInc, expense: weekExp },
+      m: { income: monthInc, expense: monthExp },
+      y: { income: yearInc, expense: yearExp },
+    };
+  }, [state.finances, todayStr]);
+
   const todayGoals = state.dailyFinanceGoals?.[todayStr] || { incomeTarget: 0, expenseLimit: 0 };
   
   const handleUpdateTodayGoals = (field: 'incomeTarget' | 'expenseLimit', val: string) => {
@@ -1422,37 +1485,289 @@ Prepend or include this command string clearly before your code block:
         </div>
       </div>
 
-      {/* TODAY'S FINANCE GOALS */}
-      <div className="bg-[#111120] border border-[#2a2a50] p-5 rounded-2xl">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-[#00d0ff] font-mono mb-4">TODAY'S FINANCE GOALS</h3>
-          <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                  <label className="block text-[10px] text-slate-500 font-bold uppercase tracking-widest font-mono mb-2">INCOME TARGET</label>
-                  <input 
-                      type="number"
-                      value={todayGoals.incomeTarget || ''}
-                      onChange={e => handleUpdateTodayGoals('incomeTarget', e.target.value)}
-                      placeholder="e.g. 100"
-                      className="w-full bg-[#0d0d1a] border border-[#2a2a50] rounded-xl px-4 py-3 text-[#00ff88] focus:outline-none focus:border-[#00ff88] font-mono text-sm"
-                  />
+      {/* 📊 PERIODIC FINANCIAL HORIZON GOALS & PERFORMANCE DESK */}
+      <div className="bg-[#111120] border border-[#2a2a50] p-5 rounded-2xl space-y-5 shadow-xl shadow-black/30">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-[#2a2a50]/60 pb-3">
+              <div>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-[#00ff88] font-mono flex items-center gap-1.5">
+                      🎯 Financial Horizon Goals
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">// Track income goals & expense budgets and verify day-by-day calculations</p>
               </div>
-              <div className="flex-1">
-                  <label className="block text-[10px] text-slate-500 font-bold uppercase tracking-widest font-mono mb-2">EXPENSE LIMIT</label>
-                  <input 
-                      type="number"
-                      value={todayGoals.expenseLimit || ''}
-                      onChange={e => handleUpdateTodayGoals('expenseLimit', e.target.value)}
-                      placeholder="e.g. 50"
-                      className="w-full bg-[#0d0d1a] border border-[#2a2a50] rounded-xl px-4 py-3 text-[#ff00a0] focus:outline-none focus:border-[#ff00a0] font-mono text-sm"
-                  />
-              </div>
-              <div className="flex-1">
-                  <label className="block text-[10px] text-slate-500 font-bold uppercase tracking-widest font-mono mb-2">TARGET PROFIT</label>
-                  <div className="w-full bg-[#0d0d1a] border border-[#2a2a50] rounded-xl px-4 py-3 text-white font-mono text-sm flex items-center h-[46px]">
-                      ${(todayGoals.incomeTarget - todayGoals.expenseLimit).toFixed(2)}
-                  </div>
+
+              {/* Interval tabs switcher */}
+              <div className="flex items-center gap-1 bg-[#090913] p-1 rounded-xl border border-[#2a2a50]/40">
+                  {([
+                      { id: 'd', label: 'Daily' },
+                      { id: 'w', label: 'Weekly' },
+                      { id: 'm', label: 'Monthly' },
+                      { id: 'y', label: 'Yearly' }
+                  ] as const).map((tab) => (
+                      <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setGoalsTab(tab.id)}
+                          className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all duration-200 ${
+                              goalsTab === tab.id
+                                  ? 'bg-[#00ff88] text-black font-extrabold shadow-[0_0_12px_rgba(0,255,136,0.25)]'
+                                  : 'text-slate-400 hover:text-white'
+                          }`}
+                      >
+                          {tab.label}
+                      </button>
+                  ))}
               </div>
           </div>
+
+          {/* Goal inputs and metrics */}
+          {(() => {
+              const getActiveTabGoals = () => {
+                  switch (goalsTab) {
+                      case 'd':
+                          return {
+                              incomeTarget: todayGoals.incomeTarget || 0,
+                              expenseLimit: todayGoals.expenseLimit || 0,
+                              actualIncome: periodicActuals.d.income,
+                              actualExpense: periodicActuals.d.expense,
+                              handleIncomeChange: (val: string) => handleUpdateTodayGoals('incomeTarget', val),
+                              handleExpenseChange: (val: string) => handleUpdateTodayGoals('expenseLimit', val)
+                          };
+                      case 'w':
+                          return {
+                              incomeTarget: state.financeIncomeTargets?.w || 0,
+                              expenseLimit: state.financeBudgets?.w || 0,
+                              actualIncome: periodicActuals.w.income,
+                              actualExpense: periodicActuals.w.expense,
+                              handleIncomeChange: (val: string) => updateIncomeTarget('w', val),
+                              handleExpenseChange: (val: string) => updateBudget('w', val)
+                          };
+                      case 'm':
+                          return {
+                              incomeTarget: state.financeIncomeTargets?.m || 0,
+                              expenseLimit: state.financeBudgets?.m || 0,
+                              actualIncome: periodicActuals.m.income,
+                              actualExpense: periodicActuals.m.expense,
+                              handleIncomeChange: (val: string) => updateIncomeTarget('m', val),
+                              handleExpenseChange: (val: string) => updateBudget('m', val)
+                          };
+                      case 'y':
+                          return {
+                              incomeTarget: state.financeIncomeTargets?.y || 0,
+                              expenseLimit: state.financeBudgets?.y || 0,
+                              actualIncome: periodicActuals.y.income,
+                              actualExpense: periodicActuals.y.expense,
+                              handleIncomeChange: (val: string) => updateIncomeTarget('y', val),
+                              handleExpenseChange: (val: string) => updateBudget('y', val)
+                          };
+                  }
+              };
+
+              const activeGoals = getActiveTabGoals();
+              const profitTarget = activeGoals.incomeTarget - activeGoals.expenseLimit;
+              const actualProfit = activeGoals.actualIncome - activeGoals.actualExpense;
+
+              const incPct = activeGoals.incomeTarget > 0 
+                  ? Math.round((activeGoals.actualIncome / activeGoals.incomeTarget) * 100) 
+                  : 0;
+
+              const expPct = activeGoals.expenseLimit > 0 
+                  ? Math.round((activeGoals.actualExpense / activeGoals.expenseLimit) * 100) 
+                  : 0;
+
+              const isOverExp = activeGoals.expenseLimit > 0 && activeGoals.actualExpense > activeGoals.expenseLimit;
+
+              // Convert current target values to equivalents across other periods
+              const getEquivalencies = () => {
+                  let dInc = 0, dExp = 0;
+                  switch (goalsTab) {
+                      case 'd':
+                          dInc = activeGoals.incomeTarget;
+                          dExp = activeGoals.expenseLimit;
+                          break;
+                      case 'w':
+                          dInc = activeGoals.incomeTarget / 7;
+                          dExp = activeGoals.expenseLimit / 7;
+                          break;
+                      case 'm':
+                          dInc = activeGoals.incomeTarget / 30.4;
+                          dExp = activeGoals.expenseLimit / 30.4;
+                          break;
+                      case 'y':
+                          dInc = activeGoals.incomeTarget / 365;
+                          dExp = activeGoals.expenseLimit / 365;
+                          break;
+                  }
+                  return {
+                      d: { income: dInc, expense: dExp },
+                      w: { income: dInc * 7, expense: dExp * 7 },
+                      m: { income: dInc * 30.4, expense: dExp * 30.4 },
+                      y: { income: dInc * 365, expense: dExp * 365 }
+                  };
+              };
+
+              const equivs = getEquivalencies();
+
+              return (
+                  <div className="space-y-5">
+                      {/* Interactive Target Editing Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="bg-[#090913] border border-[#2a2a50]/50 p-4 rounded-xl space-y-2">
+                              <label className="block text-[8px] text-slate-500 font-mono tracking-widest uppercase font-black">
+                                  💵 {goalsTab === 'd' ? 'Today\'s' : goalsTab === 'w' ? 'Weekly' : goalsTab === 'm' ? 'Monthly' : 'Yearly'} Income Target
+                              </label>
+                              <div className="relative">
+                                  <span className="absolute left-3 top-2.5 text-[10px] text-slate-500 font-mono font-bold">$</span>
+                                  <input 
+                                      type="number"
+                                      value={activeGoals.incomeTarget || ''}
+                                      onChange={e => activeGoals.handleIncomeChange(e.target.value)}
+                                      placeholder="e.g. 150.00"
+                                      className="w-full bg-[#0d0d1a] border border-[#2a2a50]/60 rounded-lg pl-6 pr-3 py-2 text-[#00ff88] focus:outline-none focus:border-[#00ff88] font-mono text-xs font-bold"
+                                  />
+                              </div>
+                              {activeGoals.incomeTarget > 0 && (
+                                  <div className="flex justify-between items-center text-[9px] font-mono mt-1">
+                                      <span className="text-slate-500">Progress:</span>
+                                      <span className="text-[#00ff88] font-black">{incPct}% ({activeGoals.actualIncome > activeGoals.incomeTarget ? "Completed ✓" : "Tracking"})</span>
+                                  </div>
+                              )}
+                          </div>
+
+                          <div className="bg-[#090913] border border-[#2a2a50]/50 p-4 rounded-xl space-y-2">
+                              <label className="block text-[8px] text-slate-500 font-mono tracking-widest uppercase font-black">
+                                  🛑 {goalsTab === 'd' ? 'Today\'s' : goalsTab === 'w' ? 'Weekly' : goalsTab === 'm' ? 'Monthly' : 'Yearly'} Expense Limit
+                              </label>
+                              <div className="relative">
+                                  <span className="absolute left-3 top-2.5 text-[10px] text-slate-500 font-mono font-bold">$</span>
+                                  <input 
+                                      type="number"
+                                      value={activeGoals.expenseLimit || ''}
+                                      onChange={e => activeGoals.handleExpenseChange(e.target.value)}
+                                      placeholder="e.g. 75.00"
+                                      className="w-full bg-[#0d0d1a] border border-[#2a2a50]/60 rounded-lg pl-6 pr-3 py-2 text-[#ff00a0] focus:outline-none focus:border-[#ff00a0] font-mono text-xs font-bold"
+                                  />
+                              </div>
+                              {activeGoals.expenseLimit > 0 && (
+                                  <div className="flex justify-between items-center text-[9px] font-mono mt-1">
+                                      <span className="text-slate-500">Threshold Used:</span>
+                                      <span className={`font-black ${isOverExp ? "text-rose-500 animate-pulse" : "text-[#ff00a0]"}`}>{expPct}% {isOverExp ? "(OVER LIMIT!)" : ""}</span>
+                                  </div>
+                              )}
+                          </div>
+
+                          <div className="bg-[#090913] border border-[#2a2a50]/50 p-4 rounded-xl space-y-2">
+                              <label className="block text-[8px] text-slate-500 font-mono tracking-widest uppercase font-black font-semibold">
+                                  📈 Net Target Profit Margin
+                              </label>
+                              <div className="relative">
+                                  <div className="w-full bg-[#0d0d1a] border border-[#2a2a50]/60 rounded-lg px-3 py-2 text-slate-200 font-mono text-xs font-bold flex items-center h-[34px]">
+                                      ${profitTarget.toFixed(2)}
+                                  </div>
+                              </div>
+                              <div className="flex justify-between items-center text-[9px] font-mono mt-1">
+                                  <span className="text-slate-500">Actual Realized Profit:</span>
+                                  <strong className={`font-black ${actualProfit >= profitTarget ? "text-[#00ff88]" : actualProfit >= 0 ? "text-amber-400" : "text-rose-500"}`}>
+                                      ${actualProfit.toFixed(2)}
+                                  </strong>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Progress visual displays */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {/* Income progress bar */}
+                          <div className="bg-[#0d0d1a]/50 p-3.5 border border-[#2a2a50]/40 rounded-xl space-y-2">
+                              <div className="flex justify-between items-center text-[10px] font-mono">
+                                  <span className="text-slate-400 font-bold uppercase tracking-wider">💵 Income Goal Completion</span>
+                                  <strong className="text-[#00ff88]">{activeGoals.actualIncome.toFixed(2)} / {activeGoals.incomeTarget.toFixed(2)} ({incPct}%)</strong>
+                              </div>
+                              <div className="w-full bg-[#090913] h-2.5 rounded-full overflow-hidden border border-[#2a2a50]/40 p-0.5">
+                                  <div 
+                                      className="h-full bg-gradient-to-r from-[#00d4ff] to-[#00ff88] rounded-full transition-all duration-300"
+                                      style={{ width: `${Math.min(100, incPct)}%` }}
+                                  />
+                              </div>
+                          </div>
+
+                          {/* Expense progress bar */}
+                          <div className="bg-[#0d0d1a]/50 p-3.5 border border-[#2a2a50]/40 rounded-xl space-y-2">
+                              <div className="flex justify-between items-center text-[10px] font-mono">
+                                  <span className="text-slate-400 font-bold uppercase tracking-wider">🛑 Expense Threshold Check</span>
+                                  <strong className={isOverExp ? "text-rose-500 font-extrabold animate-pulse" : "text-[#ff00a0]"}>
+                                      {activeGoals.actualExpense.toFixed(2)} / {activeGoals.expenseLimit.toFixed(2)} ({expPct}%)
+                                  </strong>
+                              </div>
+                              <div className="w-full bg-[#090913] h-2.5 rounded-full overflow-hidden border border-[#2a2a50]/40 p-0.5">
+                                  <div 
+                                      className={`h-full rounded-full transition-all duration-300 ${isOverExp ? 'bg-rose-500' : 'bg-gradient-to-r from-[#ff00a0] to-indigo-500'}`}
+                                      style={{ width: `${Math.min(100, expPct)}%` }}
+                                  />
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Temporal Equivalency Projection Converter */}
+                      <div className="bg-[#0e0f17] border border-[#2a2a50]/80 p-4 rounded-xl space-y-3">
+                          <div className="flex items-center gap-2 border-b border-[#2a2a50]/40 pb-2">
+                              <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0" />
+                              <h4 className="text-[10px] font-black uppercase text-cyan-400 font-mono tracking-widest">
+                                  🔄 TEMPORAL EQUIVALENCY CALCULATOR & PROJECTIONS
+                              </h4>
+                          </div>
+                          
+                          <p className="text-[10px] text-slate-400 font-mono leading-relaxed uppercase tracking-wide">
+                              Converting your active <strong className="text-[#00ff88]">{goalsTab === 'd' ? 'Daily' : goalsTab === 'w' ? 'Weekly' : goalsTab === 'm' ? 'Monthly' : 'Yearly'}</strong> targets across all metrics:
+                          </p>
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              {[
+                                  { label: "Daily Conversion", frame: "d", suffix: "day" },
+                                  { label: "Weekly Conversion", frame: "w", suffix: "week" },
+                                  { label: "Monthly Conversion", frame: "m", suffix: "month" },
+                                  { label: "Yearly Conversion", frame: "y", suffix: "year" },
+                              ].map((item) => {
+                                  const incVal = equivs[item.frame as 'd'|'w'|'m'|'y'].income;
+                                  const expVal = equivs[item.frame as 'd'|'w'|'m'|'y'].expense;
+                                  const isActiveFrame = goalsTab === item.frame;
+
+                                  return (
+                                      <div 
+                                          key={item.frame} 
+                                          className={`p-3 rounded-lg flex flex-col justify-between border ${
+                                              isActiveFrame 
+                                                  ? 'bg-[#00ff88]/5 border-[#00ff88]/30 shadow-[0_0_12px_rgba(0,255,136,0.05)]' 
+                                                  : 'bg-[#06060c] border-[#2a2a50]/40'
+                                          }`}
+                                      >
+                                          <div className="flex justify-between items-center border-b border-[#2a2a50]/20 pb-1 mb-1.5">
+                                              <span className="text-[8px] font-mono font-black text-slate-500 uppercase tracking-wider">{item.label}</span>
+                                              {isActiveFrame && <span className="text-[7px] px-1 bg-[#00ff88]/20 text-[#00ff88] font-bold uppercase rounded font-mono">Active</span>}
+                                          </div>
+                                          
+                                          <div className="space-y-1 text-[10px] font-mono font-medium">
+                                              <div className="flex justify-between">
+                                                  <span className="text-slate-400 font-bold shrink-0">Income:</span>
+                                                  <span className="text-[#00ff88] shrink-0 font-bold">${incVal.toFixed(2)}</span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                  <span className="text-slate-400 font-bold shrink-0">Limit:</span>
+                                                  <span className="text-[#ff00a0] shrink-0 font-bold">${expVal.toFixed(2)}</span>
+                                              </div>
+                                              <div className="flex justify-between border-t border-[#2a2a50]/20 pt-1 mt-1 text-[9px]">
+                                                  <span className="text-slate-500 font-semibold shrink-0">Profit:</span>
+                                                  <span className={`shrink-0 font-black ${(incVal - expVal) >= 0 ? "text-[#00d4ff]" : "text-rose-500"}`}>
+                                                      ${(incVal - expVal).toFixed(2)}
+                                                  </span>
+                                              </div>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                      </div>
+                  </div>
+              );
+          })()}
       </div>
 
       {/* ⚙️ FINANCIAL OPTIONS & SYSTEMATIC GOALS CONTROL DESK (COLLAPSIBLE DROPDOWNS) */}

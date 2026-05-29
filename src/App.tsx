@@ -1387,16 +1387,39 @@ export default function App() {
     if ((!data.mutations || !Array.isArray(data.mutations)) && !data.pendingAudio && !data.pendingTranscript) return;
     
     setAppState(prev => {
-      let next = { ...prev };
+      // Clean state cloning of all mutated nested arrays/objects to prevent StrictMode duplicates
+      const next = { 
+         ...prev,
+         reminders: prev.reminders ? [...prev.reminders] : [],
+         finances: prev.finances ? [...prev.finances] : [],
+         goals: prev.goals 
+           ? { 
+               weekly: prev.goals.weekly ? { cat: { ...prev.goals.weekly.cat }, item: { ...prev.goals.weekly.item } } : { cat: {}, item: {} },
+               monthly: prev.goals.monthly ? { cat: { ...prev.goals.monthly.cat }, item: { ...prev.goals.monthly.item } } : { cat: {}, item: {} },
+               yearly: prev.goals.yearly ? { cat: { ...prev.goals.yearly.cat }, item: { ...prev.goals.yearly.item } } : { cat: {}, item: {} }
+             }
+           : { weekly: { cat: {}, item: {} }, monthly: { cat: {}, item: {} }, yearly: { cat: {}, item: {} } },
+         expeditions: prev.expeditions ? [...prev.expeditions] : [],
+         financeGoals: prev.financeGoals ? [...prev.financeGoals] : [],
+         journals: { ...prev.journals },
+         daily: { ...prev.daily },
+         journalPrompts: [...prev.journalPrompts],
+         items: { ...prev.items }
+      };
+      
       const jd = activeDate;
       
-      if (data.pendingAudio || data.pendingTranscript) {
+      if (data.pendingTranscript) {
          if (!next.journals[jd]) {
             next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
+         } else {
+            next.journals[jd] = {
+               ...next.journals[jd],
+               sections: { ...next.journals[jd].sections }
+            };
          }
-         if (data.pendingAudio) {
-            next.journals[jd].audioLog = data.pendingAudio;
-         }
+         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
          if (data.pendingTranscript) {
             const voicePromptId = "prompt_voice_auto_logs";
             const hasVoicePrompt = next.journalPrompts.some(p => p.id === voicePromptId);
@@ -1407,183 +1430,244 @@ export default function App() {
                   placeholder: "Transcribed audio clips and commands..."
                });
             }
-            const localTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const logStr = `[${localTimeStr}] ${data.pendingTranscript}`;
+            const logStr = `[${timestamp}] ${data.pendingTranscript}`;
             const prevVal = next.journals[jd].sections[voicePromptId] || "";
-            next.journals[jd].sections[voicePromptId] = prevVal ? `${prevVal}\n${logStr}` : logStr;
+            // Ensure we do not double-record this exact transcript if already present (checking without timestamps)
+            const cleanedTranscript = data.pendingTranscript.trim();
+            const lines = prevVal.split('\n');
+            const isAlreadyRecorded = lines.some(line => {
+               const cleanLine = line.replace(/^\[\d{1,2}:\d{2}\s*(?:AM|PM)?\]\s*/i, '').trim();
+               return cleanLine === cleanedTranscript;
+            });
+            if (!isAlreadyRecorded) {
+               next.journals[jd].sections[voicePromptId] = prevVal ? `${prevVal}\n${logStr}` : logStr;
+            }
          }
       }
 
+      const getTargetCategory = (cat: string): 'studies' | 'habits' | 'leisure' | 'custom' => {
+         const c = (cat || "").toLowerCase();
+         if (c === "studies" || c === "learning" || c === "education" || c === "work" || c === "career" || c === "growth" || c === "finance" || c === "programming") return "studies";
+         if (c === "habits" || c === "health" || c === "routine" || c === "fitness" || c === "sport" || c === "gym" || c === "mind") return "habits";
+         if (c === "leisure" || c === "fun" || c === "social" || c === "hobby" || c === "hobbies" || c === "guitar") return "leisure";
+         return "custom";
+      };
+
       const muts = Array.isArray(data.mutations) ? data.mutations : [];
       muts.forEach((mut: any) => {
-         const { type, payload } = mut;
-         if (!payload) return;
-         
-         if (type === 'CREATE_GOAL') {
-             if (!next.financeGoals) next.financeGoals = [];
-             next.financeGoals.push({
-                id: payload.id || "g_" + Date.now(),
-                title: payload.title,
-                targetAmount: payload.targetAmount || 100,
-                currentAmount: payload.currentAmount || 0,
-                deadline: payload.deadline || new Date().toISOString().split("T")[0],
-                category: payload.category || "General"
-             } as any);
-         } else if (type === 'LOG_TRACKER') {
-             if (payload.categoryId && payload.item) {
-                 const ds = payload.date || activeDate;
-                 if (!next.daily[ds]) next.daily[ds] = {};
-                 if (!next.daily[ds][payload.categoryId]) next.daily[ds][payload.categoryId] = {};
-                 
-                 // make sure item exists in schema
-                 if (!next.items[payload.categoryId]) next.items[payload.categoryId] = [];
-                 if (!next.items[payload.categoryId].includes(payload.item)) {
-                     next.items[payload.categoryId].push(payload.item);
-                 }
+          const { type, payload } = mut;
+          if (!payload) return;
+          
+          if (type === 'CREATE_GOAL') {
+              if (!next.financeGoals) next.financeGoals = [];
+              next.financeGoals.push({
+                 id: payload.id || "g_" + Date.now(),
+                 title: payload.title,
+                 targetAmount: parseFloat(payload.targetAmount) || 100,
+                 currentAmount: parseFloat(payload.currentAmount) || 0,
+                 deadline: payload.deadline || new Date().toISOString().split("T")[0],
+                 category: payload.category || "General"
+              } as any);
+          } else if (type === 'CREATE_TRACKER_ITEM') {
+              const mappedCat = getTargetCategory(payload.categoryId);
+              if (mappedCat && payload.item) {
+                  if (!next.items) next.items = {} as any;
+                  if (!next.items[mappedCat]) {
+                      next.items[mappedCat] = [];
+                  }
+                  if (!next.items[mappedCat].includes(payload.item)) {
+                      next.items[mappedCat].push(payload.item);
+                  }
+              }
+          } else if (type === 'LOG_TRACKER') {
+              const mappedCat = getTargetCategory(payload.categoryId);
+              if (mappedCat && payload.item) {
+                  const ds = payload.date || activeDate;
+                  if (!next.daily[ds]) next.daily[ds] = {};
+                  if (!next.daily[ds][mappedCat]) next.daily[ds][mappedCat] = {};
+                  
+                  // make sure item exists in schema list
+                  if (!next.items) next.items = {} as any;
+                  if (!next.items[mappedCat]) next.items[mappedCat] = [];
+                  if (!next.items[mappedCat].includes(payload.item)) {
+                      next.items[mappedCat].push(payload.item);
+                  }
 
-                 next.daily[ds][payload.categoryId][payload.item] = {
-                     status: payload.status || 'done',
-                     reps: 1, hours: 0, satisfaction: 0, notes: payload.notes || ""
+                  next.daily[ds][mappedCat][payload.item] = {
+                      status: payload.status || 'done',
+                      reps: 1, hours: 0, satisfaction: 0, notes: payload.notes || ""
+                  };
+              }
+          } else if (type === 'EDIT_TRACKER') {
+              const mappedCat = getTargetCategory(payload.categoryId);
+              if (mappedCat && payload.item && payload.targetField) {
+                  const ds = payload.date || activeDate;
+                  if (next.daily[ds]?.[mappedCat]?.[payload.item]) {
+                     if (payload.targetField === 'reps') {
+                         next.daily[ds][mappedCat][payload.item].reps = Number(payload.value) || 0;
+                     } else if (payload.targetField === 'hours') {
+                         next.daily[ds][mappedCat][payload.item].hours = Number(payload.value) || 0;
+                     }
+                  }
+              }
+          } else if (type === 'SET_TRACKER_GOAL') {
+             const mappedCat = getTargetCategory(payload.categoryId);
+             if (mappedCat && payload.item && payload.targetField) {
+                 const field = payload.targetField;
+                 const val = Math.max(0, Number(payload.value) || 0);
+
+                 if (!next.repsTarget) next.repsTarget = {};
+                 if (!next.hoursTarget) next.hoursTarget = {};
+
+                 const targetObj = field === "reps" ? { ...next.repsTarget } : { ...next.hoursTarget };
+                 if (!targetObj[mappedCat]) targetObj[mappedCat] = {};
+                 targetObj[mappedCat][payload.item] = val;
+
+                 next[field === "reps" ? "repsTarget" : "hoursTarget" as any] = targetObj;
+             }
+         } else if (type === 'CREATE_REMINDER') {
+              if (!next.reminders) next.reminders = [];
+              next.reminders.push({
+                  id: payload.id || "rem_" + Date.now(),
+                  title: payload.title,
+                  dueDate: payload.dueDate || activeDate,
+                  time: payload.time || '12:00',
+                  status: 'pending',
+                  createdAt: new Date().toISOString(),
+                  priority: payload.priority || 'medium',
+                  category: payload.category || 'general'
+              });
+          } else if (type === 'LOG_FINANCE') {
+              if (!next.finances) next.finances = [];
+              next.finances.push({
+                  id: payload.id || "tx_" + Date.now(),
+                  type: payload.type || 'expense',
+                  amount: parseFloat(payload.amount) || 0,
+                  currency: payload.currency || 'USD',
+                  concept: payload.concept || 'AI Entry',
+                  category: payload.category || 'General',
+                  date: payload.date || activeDate
+              } as any);
+          } else if (type === 'UPDATE_SETTINGS') {
+              if (payload.theme) next.neonTheme = payload.theme;
+              if (payload.bgTheme) next.bgTheme = payload.bgTheme;
+              if (payload.dailyBudgetLimit !== undefined || payload.dailyIncomeTarget !== undefined) {
+                  if (!next.profile) next.profile = { name: "User", tagline: "", email: "", dailyBudgetLimit: 0, dailyIncomeTarget: 0 };
+                  if (payload.dailyBudgetLimit !== undefined) next.profile.dailyBudgetLimit = parseFloat(payload.dailyBudgetLimit);
+                  if (payload.dailyIncomeTarget !== undefined) next.profile.dailyIncomeTarget = parseFloat(payload.dailyIncomeTarget);
+              }
+          } else if (type === 'APPEND_JOURNAL') {
+              const jd = payload.date || activeDate;
+              if (!next.journals[jd]) {
+                 next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
+              } else {
+                 next.journals[jd] = {
+                    ...next.journals[jd],
+                    sections: { ...next.journals[jd].sections }
                  };
-             }
-         } else if (type === 'EDIT_TRACKER') {
-             if (payload.categoryId && payload.item && payload.targetField) {
-                 const ds = payload.date || activeDate;
-                 if (next.daily[ds]?.[payload.categoryId]?.[payload.item]) {
-                    if (payload.targetField === 'reps') {
-                        next.daily[ds][payload.categoryId][payload.item].reps = payload.value || 0;
-                    } else if (payload.targetField === 'hours') {
-                        next.daily[ds][payload.categoryId][payload.item].hours = payload.value || 0;
-                    }
-                 }
-             }
-         } else if (type === 'SET_TRACKER_GOAL') {
-            if (payload.categoryId && payload.item && payload.targetField) {
-                const cat = payload.categoryId;
-                const item = payload.item;
-                const field = payload.targetField;
-                const val = Math.max(0, Number(payload.value) || 0);
-
-                if (!next.repsTarget) next.repsTarget = {};
-                if (!next.hoursTarget) next.hoursTarget = {};
-
-                const targetObj = field === "reps" ? { ...next.repsTarget } : { ...next.hoursTarget };
-                if (!targetObj[cat]) targetObj[cat] = {};
-                targetObj[cat][item] = val;
-
-                next[field === "reps" ? "repsTarget" : "hoursTarget" as any] = targetObj;
-            }
-        } else if (type === 'CREATE_REMINDER') {
-             next.reminders.push({
-                 id: payload.id || "rem_" + Date.now(),
-                 title: payload.title,
-                 dueDate: payload.dueDate || activeDate,
-                 time: payload.time || '12:00',
-                 status: 'pending',
-                 createdAt: new Date().toISOString(),
-                 priority: payload.priority || 'medium',
-                 category: payload.category || 'general'
-             });
-         } else if (type === 'LOG_FINANCE') {
-             if (!next.finances) next.finances = [];
-             next.finances.push({
-                 id: payload.id || "tx_" + Date.now(),
-                 type: payload.type || 'expense',
-                 amount: payload.amount || 0,
-                 currency: payload.currency || 'USD',
-                 concept: payload.concept || 'AI Entry',
-                 category: payload.category || 'General',
-                 date: payload.date || activeDate
-             } as any);
-         } else if (type === 'UPDATE_SETTINGS') {
-             if (payload.theme) next.neonTheme = payload.theme;
-             if (payload.bgTheme) next.bgTheme = payload.bgTheme;
-             if (payload.dailyBudgetLimit !== undefined || payload.dailyIncomeTarget !== undefined) {
-                 if (!next.profile) next.profile = { name: "User", tagline: "", email: "", dailyBudgetLimit: 0, dailyIncomeTarget: 0 };
-                 if (payload.dailyBudgetLimit !== undefined) next.profile.dailyBudgetLimit = payload.dailyBudgetLimit;
-                 if (payload.dailyIncomeTarget !== undefined) next.profile.dailyIncomeTarget = payload.dailyIncomeTarget;
-             }
-         } else if (type === 'APPEND_JOURNAL') {
-             const jd = payload.date || activeDate;
-             if (!next.journals[jd]) {
-                next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
-             }
-             let existingPrompt = null;
-             
-             // If not explicitly asked to create a new heading, try matching existing prompts
-             if (!payload.createNewHeading) {
-                 existingPrompt = next.journalPrompts.find(p => {
-                      const topicLower = payload.topic?.toLowerCase() || "";
-                      const plabel = p.label.toLowerCase();
-                      if (plabel === topicLower || 
-                          plabel.replace(/[^\w\s]/g, "").trim() === topicLower.replace(/[^\w\s]/g, "").trim() ||
-                          p.id === topicLower) {
-                          return true;
-                      }
-                      return false;
-                 });
-                 
-                 if (!existingPrompt) {
-                     // Try synonyms falling back to built-ins
-                     existingPrompt = next.journalPrompts.find(p => {
-                          const topicLower = payload.topic?.toLowerCase() || "";
-                          if (topicLower.includes("reflection") || topicLower.includes("note") || topicLower.includes("thought") || topicLower.includes("general") || topicLower.includes("diary")) {
-                              return p.id === 'notes';
-                          } else if (topicLower.includes("win") || topicLower.includes("highlight") || topicLower.includes("gratitude")) {
-                              return p.id === 'wins';
-                          } else if (topicLower.includes("blocker") || topicLower.includes("challenge") || topicLower.includes("difficult")) {
-                              return p.id === 'blockers';
-                          } else if (topicLower.includes("tomorrow") || topicLower.includes("focus")) {
-                              return p.id === 'tomorrow';
+              }
+              let existingPrompt = null;
+              const topicStr = (payload.topic || "").trim();
+              const createNew = !!payload.createNewHeading;
+              
+              if (!createNew && topicStr) {
+                  // Try to find an existing prompt with similar name
+                  existingPrompt = next.journalPrompts.find(p => {
+                       const topicLower = topicStr.toLowerCase();
+                       const plabel = p.label.toLowerCase();
+                       const pid = p.id.toLowerCase();
+                       return plabel === topicLower || 
+                              plabel.replace(/[^\w\s]/g, "").trim() === topicLower.replace(/[^\w\s]/g, "").trim() ||
+                              pid === topicLower ||
+                              pid === "prompt_" + topicLower ||
+                              plabel.includes(topicLower);
+                  });
+                  
+                  if (!existingPrompt) {
+                      // Try synonyms falling back to built-ins
+                      existingPrompt = next.journalPrompts.find(p => {
+                           const topicLower = topicStr.toLowerCase();
+                           if (topicLower.includes("reflection") || topicLower.includes("note") || topicLower.includes("thought") || topicLower.includes("general") || topicLower.includes("diary")) {
+                               return p.id === 'notes';
+                           } else if (topicLower.includes("win") || topicLower.includes("highlight") || topicLower.includes("gratitude")) {
+                               return p.id === 'wins';
+                           } else if (topicLower.includes("blocker") || topicLower.includes("challenge") || topicLower.includes("difficult")) {
+                               return p.id === 'blockers';
+                           } else if (topicLower.includes("tomorrow") || topicLower.includes("focus")) {
+                               return p.id === 'tomorrow';
+                           }
+                           return false;
+                      });
+                  }
+              } else if (topicStr) {
+                  // If createNew is true, check if prompt exists WITH EXACT/SUBSTANTIAL name to avoid duplicate sections
+                  existingPrompt = next.journalPrompts.find(p => {
+                       const topicLower = topicStr.toLowerCase();
+                       const plabel = p.label.toLowerCase();
+                       return plabel === topicLower || 
+                              plabel.replace(/[^\w\s]/g, "").trim() === topicLower.replace(/[^\w\s]/g, "").trim();
+                  });
+              }
+              
+              if (!existingPrompt && topicStr) {
+                  const labelNormalized = topicStr.charAt(0).toUpperCase() + topicStr.slice(1);
+                  existingPrompt = {
+                     id: "prompt_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                     label: "📌 " + labelNormalized.toUpperCase(),
+                     placeholder: `Write under ${labelNormalized}...`
+                  };
+                  next.journalPrompts.push(existingPrompt);
+              }
+              
+              // Fallback to Free Notes if still no section is identified
+              if (!existingPrompt) {
+                  existingPrompt = next.journalPrompts.find(p => p.id === 'notes') || next.journalPrompts[0];
+              }
+              
+              if (existingPrompt) {
+                  const cur = next.journals[jd].sections[existingPrompt.id] || "";
+                  const textToAppend = (payload.text || "").trim();
+                  if (textToAppend) {
+                      if (existingPrompt.id === "prompt_voice_auto_logs" && data.pendingTranscript) {
+                          // Already recorded, skip duplicate logs of the raw transcript
+                      } else {
+                          const alreadyPresent = cur.trim().endsWith(textToAppend) || cur.trim() === textToAppend;
+                          if (!alreadyPresent) {
+                              next.journals[jd].sections[existingPrompt.id] = cur ? cur + "\n" + textToAppend : textToAppend;
                           }
-                          return false;
-                     });
-                 }
-             }
-
-             if (!existingPrompt) {
-                 const labelNormalized = payload.topic ? (payload.topic.charAt(0).toUpperCase() + payload.topic.slice(1)) : "Note";
-                 
-                 // Try one more time to find an existing prompt by normalized label
-                 existingPrompt = next.journalPrompts.find(p => p.label.toLowerCase().includes(labelNormalized.toLowerCase()));
-                 
-                 if (!existingPrompt) {
-                    existingPrompt = { id: "prompt_" + Date.now() + Math.floor(Math.random() * 1000), label: "📌 " + labelNormalized.toUpperCase(), placeholder: `Write under ${labelNormalized}...` };
-                    next.journalPrompts.push(existingPrompt);
-                 }
-             }
-             const cur = next.journals[jd].sections[existingPrompt.id] || "";
-             next.journals[jd].sections[existingPrompt.id] = cur ? cur + "\n" + payload.text : payload.text;
-         } else if (type === 'UPDATE_JOURNAL_METRICS') {
-             const jd = payload.date || activeDate;
-             if (!next.journals[jd]) {
-                next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
-             }
-             if (payload.mood !== undefined) next.journals[jd].mood = payload.mood;
-             if (payload.energy !== undefined) next.journals[jd].energy = payload.energy;
-             if (payload.addTags && Array.isArray(payload.addTags)) {
-                 const newTags = new Set([...next.journals[jd].tags, ...payload.addTags]);
-                 next.journals[jd].tags = Array.from(newTags);
-             }
-         } else if (type === 'DELETE_ITEM') {
-             if (payload.type === 'reminder') {
-                 next.reminders = next.reminders.filter(r => r.id !== payload.id);
-             } else if (payload.type === 'finance') {
-                 next.finances = next.finances.filter(f => f.id !== payload.id);
-             } else if (payload.type === 'goal') {
-                 next.financeGoals = next.financeGoals.filter(g => g.id !== payload.id);
-             }
-         } else if (type === 'ADD_EXPEDITION') {
-             if (!next.projects) next.projects = [];
-             next.projects.push({
-                 id: payload.id || "exp_" + Date.now(),
-                 title: payload.title,
-                 concept: payload.concept || "AI Generated Expedition",
-                 status: "planning",
-                 startDate: activeDate,
-                 tasks: []
-             } as any);
-         }
+                      }
+                  }
+              }
+          } else if (type === 'UPDATE_JOURNAL_METRICS') {
+              const jd = payload.date || activeDate;
+              if (!next.journals[jd]) {
+                 next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
+              }
+              if (payload.mood !== undefined) next.journals[jd].mood = payload.mood;
+              if (payload.energy !== undefined) next.journals[jd].energy = payload.energy;
+              if (payload.addTags && Array.isArray(payload.addTags)) {
+                  const newTags = new Set([...next.journals[jd].tags, ...payload.addTags]);
+                  next.journals[jd].tags = Array.from(newTags);
+              }
+          } else if (type === 'DELETE_ITEM') {
+              if (payload.type === 'reminder' && next.reminders) {
+                  next.reminders = next.reminders.filter(r => r.id !== payload.id);
+              } else if (payload.type === 'finance' && next.finances) {
+                  next.finances = next.finances.filter(f => f.id !== payload.id);
+              } else if (payload.type === 'goal' && next.financeGoals) {
+                  next.financeGoals = next.financeGoals.filter(g => g.id !== payload.id);
+              }
+          } else if (type === 'ADD_EXPEDITION') {
+              if (!next.projects) next.projects = [];
+              next.projects.push({
+                  id: payload.id || "exp_" + Date.now(),
+                  title: payload.title,
+                  concept: payload.concept || "AI Generated Expedition",
+                  status: "planning",
+                  startDate: activeDate,
+                  tasks: []
+              } as any);
+          }
       });
       
       saveData(next);
@@ -1840,14 +1924,28 @@ export default function App() {
 
       let summaryText = "";
       try {
-        summaryText = JSON.stringify(focusData, null, 2);
-        if (summaryText.length > 80000) {
+        const cleanState = {
+          Profile: focusData.profile,
+          Routine_Categories: focusData.categoryLabels || {},
+          Journal_Tags: focusData.journalTags || [],
+          Habit_Item_Templates: focusData.items || {},
+          Goals_Active: focusData.goals,
+          Daily_Performance_Log: focusData.daily,
+          Journal_Entries_And_Mood: focusData.journals,
+          Financial_Ledger: focusData.finances,
+          Pomodoro_Focus_Sessions: focusData.pomoSessions,
+          Reminders_And_Cognitive_Debt: focusData.reminders,
+          Travel_Expeditions: focusData.expeditions,
+          Projects: (focusData as any).projects || [],
+        };
+        summaryText = JSON.stringify(cleanState, null, 2);
+        if (summaryText.length > 150000) {
           summaryText =
-            summaryText.substring(0, 80000) +
+            summaryText.substring(0, 150000) +
             "\n... [Data Truncated due to size but trends remain visible]";
         }
       } catch (e) {
-        summaryText = "[Data Overview]";
+        summaryText = "[Data Overview Error]";
       }
 
       finalPrompt = `Hello AI, act as my elite personal analyst, data scientist, and life-optimization executive assistant for my "Omnilife Tracker".
@@ -1857,15 +1955,16 @@ I am providing you with my personal real-world data exported directly from Omnil
 
 ### OMNILIFE TRACKER - SYSTEM ARCHITECTURE (HOW TO READ THE DATA):
 Omnilife Tracker is a comprehensive life-management engine. All my data is stored as a massive interconnected JSON tree. The modules are deeply interlocked:
-1. **Daily Tracker (\`daily\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in.
-2. **Daily Journal (\`journals\`)**: Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\`, text arrays, and canvas sketches. Crucial for psychological correlation.
-3. **Goals & Targets (\`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime').
-4. **Finances (\`finances\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & categorization.
-5. **Pomodoro Focus (\`pomoSessions\`)**: Focus timer logs with start/end timestamps.
-6. **Reminders (\`reminders\`)**: Cognitive load, priority loops, and scheduled time-blocks.
-7. **Expeditions (\`expeditions\`)**: Tactical deployment tracking, location mapping, and payload logistics.
+1. **Daily Tracker (\`Daily_Performance_Log\` / \`daily\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in.
+2. **Daily Journal (\`Journal_Entries_And_Mood\` / \`journals\`)**: Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\`, text arrays, canvas sketches, and a list of \`audioTracks\` (each track holds \`src\` base64 audio, \`timestamp\` and voice text \`transcript\`). Since I can speak or log multiple voice logs/transcripts per day, analyze my mental state progression across these multiple speech records sequentially rather than treating them as a single prompt block. Crucial for psychological correlation and mood tracking.
+3. **Goals & Targets (\`Goals_Active\` / \`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Target \`reps\` and \`hours\` for specific tasks.
+4. **Finances (\`Financial_Ledger\` / \`finances\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & categorization.
+5. **Pomodoro Focus (\`Pomodoro_Focus_Sessions\` / \`pomoSessions\`)**: Focus timer logs with start/end timestamps.
+6. **Reminders (\`Reminders_And_Cognitive_Debt\` / \`reminders\`)**: Cognitive load, priority loops, and scheduled time-blocks.
+7. **Expeditions (\`Travel_Expeditions\` / \`expeditions\`)**: Tactical deployment tracking, location mapping, and payload logistics.
 8. **Knowledge Graph / The Priest**: The omni-view semantic layer. You MUST act as this node graph. When analyzing the JSON, build virtual edges connecting finances to journals to habits.
 9. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a 50 USD expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Create an expedition to Tokyo next week", "Set my mood to 5 for yesterday", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
+10. **System Sync Mechanisms**: I can synchronize my database of configurations, metrics, and logs completely offline either via **Ghost Sync** (instantly auto-writes the entire JSON to local disk pointer handle), **AirDrop WebRTC** (exchanges handshakes with other device nodes to synchronize database state directly), or **Bluetooth Link** (scans nearby close-range Bluetooth tokens). Suggest optimizations on how I should manage backups and device switches.
 
 ${specificInstructions}
 
@@ -1906,6 +2005,49 @@ ${summaryText}
         console.error("Service Worker registration failed:", err);
       });
     }
+  }, []);
+
+  // 1.5. Local Storage limit optimization utilities
+  const handleFreeStorage = () => {
+    setAppState((prev) => {
+      const next = { ...prev };
+      let logsCleared = 0;
+      if (next.journals) {
+        Object.keys(next.journals).forEach((dateKey) => {
+          const entry = next.journals[dateKey];
+          if (entry && entry.audioTracks && entry.audioTracks.length > 0) {
+            entry.audioTracks = entry.audioTracks.map((track: any) => {
+              if (track.src) {
+                logsCleared++;
+                return { ...track, src: "" };
+              }
+              return track;
+            });
+          }
+        });
+      }
+      if (next.sketches && next.sketches.length > 0) {
+         next.sketches = [];
+      }
+      saveData(next);
+      showToast(`SUCCESSFULLY FREED UP ${logsCleared} VOICE AUDIO CLIPS (TRANSCRIPTS RETAINED!)`, "ok");
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const handleStorageFull = () => {
+      showToast(
+        "LOCAL STORAGE LIMIT EXCEEDED! Optimize storage to free up 95%+ of occupied space while retaining your text transcripts.",
+        "action",
+        {
+          label: "OPTIMIZE STORAGE",
+          onClick: handleFreeStorage,
+        }
+      );
+    };
+    window.addEventListener("omnilife_storage_full", handleStorageFull);
+    return () => window.removeEventListener("omnilife_storage_full", handleStorageFull);
   }, []);
 
   const [ghostOffline, setGhostOffline] = useState(false);
@@ -1955,7 +2097,7 @@ ${summaryText}
       const currentTime = `${hrs}:${mins}`;
 
       appState.reminders?.forEach(rem => {
-        if (rem.status === 'pending' && rem.dueDate === currentDate && rem.time === currentTime) {
+        if (rem && rem.status === 'pending' && rem.dueDate === currentDate && rem.time === currentTime) {
            const guardKey = `notif_${rem.id}_${currentDate}_${currentTime}`;
            if (!localStorage.getItem(guardKey)) {
               sendBackgroundNotification(`Reminder: ${rem.title}`, {
@@ -2363,13 +2505,32 @@ ${summaryText}
     if (!appState.daily[ds]) appState.daily[ds] = {};
     if (!appState.daily[ds][cat]) appState.daily[ds][cat] = {};
     if (!appState.daily[ds][cat]![item]) {
+      let implicitStatus: TrackerStatus = "pending";
+      const isSch = isScheduledToday(cat, item, ds);
+      if (!isSch) {
+          implicitStatus = "skipped";
+      } else if (isSch && ds < todayStr()) {
+          implicitStatus = "missed";
+      }
+
       appState.daily[ds][cat]![item] = {
-        status: "pending",
+        status: implicitStatus,
         reps: appState.repsTarget[cat]?.[item] ?? 1,
         hours: appState.hoursTarget[cat]?.[item] ?? 1,
         satisfaction: 0,
         notes: "",
       };
+    } else {
+        // If it exists but is left stuck on pending explicitly
+        const entry = appState.daily[ds][cat]![item];
+        if (entry.status === 'pending') {
+            const isSch = isScheduledToday(cat, item, ds);
+            if (!isSch) {
+                entry.status = "skipped";
+            } else if (isSch && ds < todayStr()) {
+                entry.status = "missed";
+            }
+        }
     }
     return appState.daily[ds][cat]![item];
   };
@@ -2417,33 +2578,6 @@ ${summaryText}
       : 1;
   };
 
-  // Streak calculators
-  const calculateStreak = (cat: TrackerCategory, item: string): number => {
-    let s = 0;
-    const d = new Date(todayStr() + "T00:00:00");
-
-    for (let i = 0; i < 365; i++) {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const dy = String(d.getDate()).padStart(2, "0");
-      const ds = `${year}-${month}-${dy}`;
-
-      const entry = appState.daily[ds]?.[cat]?.[item];
-      const st = entry ? entry.status : "pending";
-
-      if (st === "done") {
-        s++;
-      } else if (st === "skipped") {
-        d.setDate(d.getDate() - 1);
-        continue;
-      } else {
-        break;
-      }
-      d.setDate(d.getDate() - 1);
-    }
-    return s;
-  };
-
   // 7. Recurring task calendar schedules calculations
   const getRecurring = (cat: TrackerCategory, item: string) => {
     return appState.recurringTasks[`${cat}::${item}`] || null;
@@ -2466,6 +2600,40 @@ ${summaryText}
     if (rec.freq === "custom") return rec.days.includes(dow);
 
     return true;
+  };
+
+  // Streak calculators
+  const calculateStreak = (cat: TrackerCategory, item: string): number => {
+    let s = 0;
+    const d = new Date(todayStr() + "T00:00:00");
+
+    for (let i = 0; i < 365; i++) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const dy = String(d.getDate()).padStart(2, "0");
+      const ds = `${year}-${month}-${dy}`;
+
+      const entry = appState.daily[ds]?.[cat]?.[item];
+      let st = entry ? entry.status : "pending";
+      
+      const isSch = isScheduledToday(cat, item, ds);
+      if (!isSch && st === "pending") {
+          st = "skipped";
+      } else if (isSch && st === "pending" && ds < todayStr()) {
+          st = "missed";
+      }
+
+      if (st === "done") {
+        s++;
+      } else if (st === "skipped") {
+        d.setDate(d.getDate() - 1);
+        continue;
+      } else {
+        break;
+      }
+      d.setDate(d.getDate() - 1);
+    }
+    return s;
   };
 
   // Day general checkin calculations
@@ -2494,6 +2662,9 @@ ${summaryText}
         // Auto skip un-scheduled pending items
         if (!isSch && statusValue === "pending") {
           statusValue = "skipped";
+        } else if (isSch && statusValue === "pending" && ds < todayStr()) {
+          // If a scheduled item is left pending on a past date, it is implicitly missed
+          statusValue = "missed";
         }
 
         // We count it if it's scheduled OR if it's an adhoc item that was marked done or has hours
@@ -3090,7 +3261,7 @@ ${summaryText}
           <DashboardView
             state={appState}
             date={activeDate}
-            onNavigate={setActiveView}
+            onNavigate={handleNavigate}
             onSetDate={setActiveDate}
             getDayD={getDayD}
             dayStats={dayStats}
@@ -3308,56 +3479,117 @@ ${summaryText}
             onUpdateJournalTags={handleUpdateJournalTags}
             onAddReminder={handleAddReminder}
             onToggleReminder={handleToggleReminder}
-            onNavigate={setActiveView}
+            onNavigate={handleNavigate}
             autoStartVoice={autoStartVoiceLog}
             onClearAutoStartVoice={() => setAutoStartVoiceLog(false)}
             autoStartText={autoStartTextLog}
             onClearAutoStartText={() => setAutoStartTextLog(false)}
             onOmniCommand={handleOmniMutations}
-            onApplyAiLogs={(actions) => {
+            onApplyAiLogs={(actions, _, pendingTranscript) => {
                setAppState(prev => {
-                  const next = { ...prev };
+                  const next = { 
+                     ...prev,
+                     reminders: prev.reminders ? [...prev.reminders] : [],
+                     finances: prev.finances ? [...prev.finances] : [],
+                     goals: prev.goals 
+                       ? { 
+                           weekly: prev.goals.weekly ? { cat: { ...prev.goals.weekly.cat }, item: { ...prev.goals.weekly.item } } : { cat: {}, item: {} },
+                           monthly: prev.goals.monthly ? { cat: { ...prev.goals.monthly.cat }, item: { ...prev.goals.monthly.item } } : { cat: {}, item: {} },
+                           yearly: prev.goals.yearly ? { cat: { ...prev.goals.yearly.cat }, item: { ...prev.goals.yearly.item } } : { cat: {}, item: {} }
+                         }
+                       : { weekly: { cat: {}, item: {} }, monthly: { cat: {}, item: {} }, yearly: { cat: {}, item: {} } },
+                     expeditions: prev.expeditions ? [...prev.expeditions] : [],
+                     financeGoals: prev.financeGoals ? [...prev.financeGoals] : [],
+                     journals: { ...prev.journals },
+                     daily: { ...prev.daily },
+                     journalPrompts: [...prev.journalPrompts],
+                     items: { ...prev.items }
+                  };
+                  const jd = activeDate;
+                  
+                  if (pendingTranscript) {
+                     if (!next.journals[jd]) {
+                        next.journals[jd] = { date: jd, mood: 0, energy: 0, tags: [], sections: {}, savedAt: new Date().toISOString() };
+                     } else {
+                        next.journals[jd] = {
+                           ...next.journals[jd],
+                           sections: { ...next.journals[jd].sections }
+                        };
+                     }
+                     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                     if (pendingTranscript) {
+                        const voicePromptId = "prompt_voice_auto_logs";
+                        const hasVoicePrompt = next.journalPrompts.some(p => p.id === voicePromptId);
+                        if (!hasVoicePrompt) {
+                           next.journalPrompts.push({
+                              id: voicePromptId,
+                              label: "Voice Auto-Logs",
+                              placeholder: "Transcribed audio clips and commands..."
+                           });
+                        }
+                        const logStr = `[${timestamp}] ${pendingTranscript}`;
+                        const prevVal = next.journals[jd].sections[voicePromptId] || "";
+                        // Ensure we do not double-record this exact transcript if already present (checking without timestamps)
+                        const cleanedTranscript = pendingTranscript.trim();
+                        const lines = prevVal.split('\n');
+                        const isAlreadyRecorded = lines.some(line => {
+                           const cleanLine = line.replace(/^\[\d{1,2}:\d{2}\s*(?:AM|PM)?\]\s*/i, '').trim();
+                           return cleanLine === cleanedTranscript;
+                        });
+                        if (!isAlreadyRecorded) {
+                           next.journals[jd].sections[voicePromptId] = prevVal ? `${prevVal}\n${logStr}` : logStr;
+                        }
+                     }
+                  }
+
                   actions.forEach(act => {
                      const targetD = act.date || activeDate;
+                     const stableActId = act.id || "rem_ai_" + Date.now() + Math.random().toString(36).substring(7);
+
                      if (act.module === "reminders") {
-                        if (!next.reminders) next.reminders = [];
-                        let pLevel: "low" | "medium" | "high" = "medium";
-                        if (act.priority === "high") pLevel = "high";
-                        if (act.priority === "low") pLevel = "low";
+                        const alreadyExists = next.reminders.some(r => r.id === stableActId);
+                        if (!alreadyExists) {
+                           let pLevel: "low" | "medium" | "high" = "medium";
+                           if (act.priority === "high") pLevel = "high";
+                           if (act.priority === "low") pLevel = "low";
 
-                        let remNotes = act.description || "";
-                        if (act.location) {
-                           remNotes = `Location: ${act.location}. ${remNotes}`;
+                           let remNotes = act.description || "";
+                           if (act.location) {
+                              remNotes = `Location: ${act.location}. ${remNotes}`;
+                           }
+
+                           next.reminders.push({
+                              id: stableActId,
+                              title: act.title || "AI Alert",
+                              dueDate: targetD,
+                              time: act.time || "",
+                              type: act.type || "Personal",
+                              priority: pLevel,
+                              repeat: act.repeat || "none",
+                              notes: remNotes || "Auto-logged from AI Journal Analysis",
+                              status: "pending",
+                              enableAlert: act.enableAlert !== false,
+                              alertOffset: act.alertOffset || 0
+                           });
                         }
-
-                        next.reminders.push({
-                           id: "rem_ai_" + Date.now() + Math.random().toString(36).substring(7),
-                           title: act.title || "AI Alert",
-                           dueDate: targetD,
-                           time: act.time || "",
-                           type: act.type || "Personal",
-                           priority: pLevel,
-                           repeat: act.repeat || "none",
-                           notes: remNotes || "Auto-logged from AI Journal Analysis",
-                           status: "pending",
-                           enableAlert: act.enableAlert !== false,
-                           alertOffset: act.alertOffset || 0
-                        });
                      } else if (act.module === "finances") {
-                        if (!next.finances) next.finances = [];
-                        next.finances.push({
-                           id: "tx_ai_" + Date.now() + Math.random().toString(36).substring(7),
-                           date: targetD,
-                           timestamp: `${targetD}T12:00:00Z`,
-                           amount: parseFloat(act.amount) || 0,
-                           concept: act.concept || "AI Finance Log",
-                           notes: "Auto-logged from AI Journal Analysis",
-                           category: act.category || "General",
-                           currency: "USD",
-                           source: "user",
-                           type: act.type === "credit" || act.type === "income" ? "credit" : "debit",
-                           counterparty: "General"
-                        });
+                        const alreadyExists = next.finances.some(f => f.id === stableActId);
+                        if (!alreadyExists) {
+                           next.finances.push({
+                              id: stableActId,
+                              date: targetD,
+                              timestamp: `${targetD}T12:00:00Z`,
+                              amount: parseFloat(act.amount) || 0,
+                              concept: act.concept || "AI Finance Log",
+                              notes: "Auto-logged from AI Journal Analysis",
+                              category: act.category || "General",
+                              currency: "USD",
+                              source: "user",
+                              type: act.type === "credit" || act.type === "income" ? "credit" : "debit",
+                              counterparty: "General"
+                           });
+                        }
                      } else if (act.module === "tracker") {
                         if (!next.daily[targetD]) next.daily[targetD] = {};
                         
@@ -3385,19 +3617,42 @@ ${summaryText}
                            };
                         }
                      } else if (act.module === "goals") {
-                        if (!next.goals) next.goals = [];
-                        next.goals.push({
-                           id: "goal_ai_" + Date.now() + Math.random().toString(36).substring(7),
-                           title: act.title || "AI Goal",
-                           target: act.target || "1",
-                           timeline: act.timeline || "monthly",
-                           category: "General",
-                           reps: 0
-                        });
+                        const timeline = (act.timeline === "weekly" || act.timeline === "monthly" || act.timeline === "yearly") ? act.timeline : "monthly";
+                        const isItem = !!act.itemTitle;
+                        const scope = isItem ? "item" : "cat";
+                        
+                        let cat: TrackerCategory = "habits";
+                        const specCat = (act.category || "").toLowerCase();
+                        if (["health", "work", "habits", "mind", "routine", "social"].includes(specCat)) {
+                           cat = specCat as TrackerCategory;
+                        }
+
+                        const key = isItem ? `${cat}::${act.itemTitle}` : cat;
+                        
+                        if (!next.goals[timeline]) {
+                           next.goals[timeline] = { cat: {}, item: {} };
+                        }
+                        if (!next.goals[timeline][scope]) {
+                           next.goals[timeline][scope] = {};
+                        }
+                        
+                        const targetVal = parseFloat(act.target || act.reps || act.hours) || 1;
+                        const isHours = !!act.hours || (act.target && act.target.toLowerCase().includes("hr"));
+                        const field: "reps" | "hours" = isHours ? "hours" : "reps";
+
+                        if (!next.goals[timeline][scope][key]) {
+                           next.goals[timeline][scope][key] = { reps: 0, hours: 0, auto: false };
+                        }
+
+                        next.goals[timeline][scope][key] = {
+                           reps: field === "reps" ? targetVal : (next.goals[timeline][scope][key]?.reps || 0),
+                           hours: field === "hours" ? targetVal : (next.goals[timeline][scope][key]?.hours || 0),
+                           auto: false
+                        };
                      } else if (act.module === "expeditions") {
                         if (!next.expeditions) next.expeditions = [];
                         next.expeditions.push({
-                           id: "exp_ai_" + Date.now() + Math.random().toString(36).substring(7),
+                           id: stableActId,
                            title: act.title || "AI Expedition",
                            dateStart: act.dateStart || targetD,
                            dateEnd: act.dateEnd || targetD,
@@ -3407,6 +3662,9 @@ ${summaryText}
                         });
                      }
                   });
+                  next.reminders = next.reminders.filter((item: any, idx: number, self: any[]) => self.findIndex(r => r.id === item.id) === idx);
+                  next.finances = next.finances.filter((item: any, idx: number, self: any[]) => self.findIndex(f => f.id === item.id) === idx);
+                  next.expeditions = next.expeditions.filter((item: any, idx: number, self: any[]) => self.findIndex(e => e.id === item.id) === idx);
                   setTimeout(() => saveData(next), 0);
                   return next;
                });
@@ -3430,8 +3688,8 @@ ${summaryText}
           <SearchView
             state={appState}
             onSetDate={setActiveDate}
-            onSetTab={setActiveView as any}
-            onNavigate={setActiveView}
+            onSetTab={() => {}}
+            onNavigate={handleNavigate}
             getDayD={getDayD}
           />
         );
@@ -3459,6 +3717,7 @@ ${summaryText}
             onExportCSV={handleExportCSV}
             onImportJSON={handleImportJSONText}
             onResetAll={handleResetAll}
+            onFreeStorage={handleFreeStorage}
           />
         );
       case "help":
@@ -3476,7 +3735,7 @@ ${summaryText}
             onToggleReminder={handleToggleReminder}
             onMuteReminder={handleMuteReminder}
             onToggleMuteSystemAlerts={handleToggleMuteGhostAlerts}
-            onNavigate={setActiveView}
+            onNavigate={handleNavigate}
           />
         );
       case "focus_audio":
@@ -3573,7 +3832,9 @@ ${summaryText}
                 // Curate a clean, 360-degree view of the user's data by omitting noisy app states
                 const cleanState = {
                   Profile: focusData.profile,
-                  Categories_And_Tags: focusData.categories,
+                  Routine_Categories: focusData.categoryLabels || {},
+                  Journal_Tags: focusData.journalTags || [],
+                  Habit_Item_Templates: focusData.items || {},
                   Goals_Active: focusData.goals,
                   Daily_Performance_Log: focusData.daily,
                   Journal_Entries_And_Mood: focusData.journals,
@@ -3581,7 +3842,7 @@ ${summaryText}
                   Pomodoro_Focus_Sessions: focusData.pomoSessions,
                   Reminders_And_Cognitive_Debt: focusData.reminders,
                   Travel_Expeditions: focusData.expeditions,
-                  Projects: focusData.projects,
+                  Projects: (focusData as any).projects || [],
                 };
                 summaryText = JSON.stringify(cleanState, null, 2);
                 if (summaryText.length > 500000) {
@@ -3594,23 +3855,24 @@ ${summaryText}
               }
 
               const finalPrompt = `Hello AI, act as my elite personal analyst, data scientist, and life-optimization executive assistant for my "Omnilife Tracker".
-
+ 
 ### OVERALL PRIME DIRECTIVE
 I am providing you with my personal real-world data exported directly from Omnilife Tracker. I want you to perform a highly advanced, brutal, and mathematically precise analysis to help me optimize my life, habits, productivity, and finances. Do not give generic self-help advice. Base EVERY insight on the exact numbers, correlations, and timestamps provided in the JSON data.
 
 ### OMNILIFE TRACKER - SYSTEM ARCHITECTURE (HOW TO READ THE DATA)
 Omnilife Tracker is a comprehensive life-management engine. All my data is stored as a massive interconnected JSON tree. The modules are deeply interlocked:
-1. **Daily Tracker (\`Daily_Performance_Log\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in.
-2. **Daily Journal (\`Journal_Entries_And_Mood\`)**: Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\`, text arrays, and canvas sketches. Crucial for psychological correlation.
-3. **Goals & Targets (\`Goals_Active\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Target \`reps\` and \`hours\` for specific tasks.
-4. **Finances (\`Financial_Ledger\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & precise time parsed from file imports (CSV, Excel) and Smart Text Imports (raw SMS/Text). Detailed categorization.
-5. **Pomodoro Focus (\`Pomodoro_Focus_Sessions\`)**: Focus timer logs with start/end timestamps, tasks mapped, and ambient audio states.
-6. **Reminders (\`Reminders_And_Cognitive_Debt\`)**: Cognitive load tracking (alerts, recurring loops).
-7. **Expeditions (\`Travel_Expeditions\`)**: Logistics and packing arrays.
+1. **Daily Tracker (\`Daily_Performance_Log\` / \`daily\`)**: Contains \`status\` (pending | done | missed | skipped), \`hours\` (number), \`reps\` (number), \`notes\`, and \`satisfaction\`. Evening Debriefs lock this data in.
+2. **Daily Journal (\`Journal_Entries_And_Mood\` / \`journals\`)**: Contains \`mood\` (1-5 scale), \`energy\` (1-5 scale), \`tags\`, text arrays, canvas sketches, and a list of \`audioTracks\` (each track holds \`src\` base64 audio, \`timestamp\` and voice text \`transcript\`). Since I can speak or log multiple voice logs/transcripts per day, analyze my mental state progression across these multiple speech records sequentially rather than treating them as a single prompt block. Crucial for psychological correlation and mood tracking.
+3. **Goals & Targets (\`Goals_Active\` / \`goals\`)**: Structured by period ('weekly', 'monthly', 'yearly', 'lifetime'). Target \`reps\` and \`hours\` for specific tasks.
+4. **Finances (\`Financial_Ledger\` / \`finances\`)**: Highly advanced ledger. Contains \`transactions\` with exact date & precise time parsed from file imports (CSV, Excel) and Smart Text Imports (raw SMS/Text). Detailed categorization.
+5. **Pomodoro Focus (\`Pomodoro_Focus_Sessions\` / \`pomoSessions\`)**: Focus timer logs with start/end timestamps, tasks mapped, and ambient audio states.
+6. **Reminders (\`Reminders_And_Cognitive_Debt\` / \`reminders\`)**: Cognitive load tracking (alerts, recurring loops).
+7. **Expeditions (\`Travel_Expeditions\` / \`expeditions\`)**: Logistics and packing arrays.
 8. **OmniLife Voice/Text Mutations**: If you want to suggest actionable changes in your output to help me optimize, you MUST formulate them as natural language instructions that can be parsed by an NLP model. Examples: "Log a $50 expense for dining today", "Create a reminder to pay rent tomorrow at 9 AM", "Set my mood to 5 for yesterday", or "Mark habit gym as done today." I will copy your suggested text into my app's input!
+9. **System Sync Mechanisms**: I can synchronize my database of configurations, metrics, and logs completely offline either via **Ghost Sync** (instantly auto-writes the entire JSON to local disk pointer handle), **AirDrop WebRTC** (exchanges handshakes with other device nodes to synchronize database state directly), or **Bluetooth Link** (scans nearby close-range Bluetooth tokens). Suggest optimizations on how I should manage backups and device switches.
 
 ${specificInstructions}
-
+ 
 ### EXPORTED JSON DATA MINING TARGET
 \`\`\`json
 ${summaryText}
@@ -3754,7 +4016,7 @@ Provide 3-5 exact, natural-language commands based on your Roadmap that I can co
           <ReminderAlert
             state={appState}
             hasSystemAlerts={ghostOffline && !appState.muteGhostAlerts}
-            onNavigate={setActiveView}
+            onNavigate={handleNavigate}
           />
         </>
       )}
@@ -4160,7 +4422,7 @@ Provide 3-5 exact, natural-language commands based on your Roadmap that I can co
            appState={appState}
            setAppState={setAppState}
            onClose={() => setShowEveningDebrief(false)}
-           onNavigate={setActiveView}
+           onNavigate={handleNavigate}
         />
       )}
 

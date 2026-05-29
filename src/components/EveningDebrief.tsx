@@ -697,8 +697,23 @@ export function EveningDebrief({ appState, setAppState, onClose, onNavigate }: E
                                             </button>
                                         </div>
                                     ) : (
-                                        <>
-                                            <label className="block text-xs uppercase tracking-widest text-[#00d0ff]">{prompt.label}</label>
+                                        <div className="flex items-center justify-between w-full">
+                                            <div className="flex items-center gap-2">
+                                                <label className="block text-xs uppercase tracking-widest text-[#00d0ff] font-mono">{prompt.label}</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                                        const cleanVal = (sections[prompt.id] || '').trim();
+                                                        const newVal = cleanVal ? `[${ts}] ${cleanVal}` : `[${ts}] `;
+                                                        setSections({...sections, [prompt.id]: newVal});
+                                                    }}
+                                                    className="text-[9px] text-[#00d0ff] hover:text-[#33dbff] font-mono hover:underline cursor-pointer flex items-center gap-1 select-none"
+                                                    title="Timestamp this brief entry"
+                                                >
+                                                    🕒 Timestamp
+                                                </button>
+                                            </div>
                                             <button 
                                                 onClick={() => { setEditingPromptId(prompt.id); setEditPromptLabel(prompt.label); }} 
                                                 className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-[#00d0ff] transition-opacity p-1"
@@ -706,12 +721,19 @@ export function EveningDebrief({ appState, setAppState, onClose, onNavigate }: E
                                             >
                                                 <Edit2 size={12} />
                                             </button>
-                                        </>
+                                        </div>
                                     )}
                                 </div>
                                 <textarea 
                                     value={sections[prompt.id] || ''}
                                     onChange={(e) => setSections({...sections, [prompt.id]: e.target.value})}
+                                    onBlur={(e) => {
+                                        const val = e.target.value.trim();
+                                        if (val && !/^\[\d{1,2}:\d{2}/.test(val)) {
+                                            const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                            setSections({...sections, [prompt.id]: `[${ts}] ${val}`});
+                                        }
+                                    }}
                                     placeholder={prompt.placeholder}
                                     className="w-full bg-[#111120] border border-[#2a2a50] rounded-xl p-4 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#00d0ff] transition-colors resize-y h-24 whitespace-pre-wrap"
                                 />

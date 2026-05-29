@@ -71,7 +71,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [isCustomizerOpen, setIsCustomizerOpen] = React.useState(false);
 
   const [showStartPrompt, setShowStartPrompt] = React.useState(() => {
-    return typeof window !== "undefined" && !localStorage.getItem("omnilife_start_prompt_seen_" + activeDate);
+    if (typeof window === "undefined") return false;
+    const hasData = state.daily && state.daily[activeDate] && Object.keys(state.daily[activeDate]).length > 0;
+    if (hasData) return false;
+    return !localStorage.getItem("omnilife_start_prompt_seen_" + activeDate);
   });
 
   React.useEffect(() => {

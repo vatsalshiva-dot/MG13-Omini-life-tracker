@@ -252,7 +252,15 @@ export const StepByStepGuideModal: React.FC<GuideProps> = ({
           desc: "👉 ACTION: Click the 'Import JSON' file-uploader adjacent to the exporter to pick any old backup file you previously exported. This immediately re-populates all tracking states, reversing any local corruptions.",
         },
         {
-          title: "Step 3: Danger Zone Array Clearing",
+          title: "Step 3: Ghost Sync (100% Private Auto-Save)",
+          desc: "👉 AUTOSAVE: Use the 'Ghost Sync' card at the top. Click 'Create New Node' to save a local `.json` file. The app saves a secure browser handle, and every click is instantly auto-written to disk. Toggle '[+ Info / Why]' in the header to expand detailed guidelines.",
+        },
+        {
+          title: "Step 4: AirDrop WebRTC & Bluetooth Sync Lanes",
+          desc: "👉 OPTICAL TUNNELING: Swap between 'AirDrop WebRTC' and 'Bluetooth Link' tabs. WebRTC allows device state synchronization with other nodes over custom handshake signatures. Bluetooth allows pairing nearby hardware tokens completely offline.",
+        },
+        {
+          title: "Step 5: Danger Zone Array Clearing",
           desc: "👉 ACTION: In the 'Danger Zone' tier, you'll find specialized buttons to NUKE or erase specifically targeted modules (like wiping Daily Logs without deleting Finance). Follow the on-screen aggressive warnings purely if you require absolute resets.",
         },
       ],

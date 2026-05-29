@@ -95,6 +95,9 @@ export function saveData(data: AppState) {
     localStorage.setItem(isDemo ? 'demo_' + SK : SK, JSON.stringify(data));
   } catch (e) {
     console.error('Local Storage full!', e);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('omnilife_storage_full'));
+    }
   }
   if (typeof window !== 'undefined' && !window.location.search.includes('demo=true')) {
     ghostSyncWrite(data).catch(() => {});

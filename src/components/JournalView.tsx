@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AppState, TrackerCategory, JournalEntry, Reminder, JournalPrompt } from '../types';
 import { fmtShort, fmtDate, todayStr } from '../utils/date';
 import { CATS } from '../utils/storage';
+import { PriestEngine } from '../utils/priestEngine';
 import { 
   Plus, Trash2, Edit3, Settings, Bell, Calendar, CheckSquare, 
   Smile, Zap, Award, ThumbsUp, Tag, PlusCircle, Check, MapPin, Image as ImageIcon, ClipboardCopy, FileImage, Search, Brain, X, Loader, Mic, MicOff, FileText
@@ -29,7 +30,7 @@ interface JournalViewProps {
   onAddReminder: (rem: Omit<Reminder, 'id' | 'status'>) => void;
   onToggleReminder: (id: string) => void;
   onNavigate: (viewId: string) => void;
-  onApplyAiLogs?: (actions: any[]) => void;
+  onApplyAiLogs?: (actions: any[], pendingAudio?: string, pendingTranscript?: string) => void;
   autoStartVoice?: boolean;
   onClearAutoStartVoice?: () => void;
   autoStartText?: boolean;
@@ -58,7 +59,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
 }) => {
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [aiPercent, setAiPercent] = useState(0);
-  const [aiActionsModal, setAiActionsModal] = useState<{ isOpen: boolean; actions: any[] }>({ isOpen: false, actions: [] });
+  const [aiActionsModal, setAiActionsModal] = useState<{ isOpen: boolean; actions: any[]; pendingAudio?: string; pendingTranscript?: string }>({ isOpen: false, actions: [] });
   const [omniModal, setOmniModal] = useState<{ isOpen: boolean; data: any | null; pendingAudio?: string; pendingTranscript?: string }>({ isOpen: false, data: null });
   const [alertModal, setAlertModal] = useState<{ message: string; title: string } | null>(null);
 
@@ -167,15 +168,13 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [isManualEditing, setIsManualEditing] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  
   const [accumulatedTranscript, setAccumulatedTranscript] = useState('');
   const accumulatedTranscriptRef = useRef('');
   useEffect(() => { accumulatedTranscriptRef.current = accumulatedTranscript; }, [accumulatedTranscript]);
   const baseTranscriptRef = useRef('');
   
   const recognitionRef = useRef<any>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
   const userStoppedRecordingRef = useRef(false);
 
   useEffect(() => {
@@ -223,19 +222,14 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
   const stopVoiceAndTracks = () => {
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch(e){}
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      try { mediaRecorderRef.current.stop(); } catch(e){}
-    }
-    if (mediaStreamRef.current) {
       try {
-        mediaStreamRef.current.getTracks().forEach(track => {
-          track.stop();
-          track.enabled = false;
-        });
+         recognitionRef.current.onstart = null;
+         recognitionRef.current.onresult = null;
+         recognitionRef.current.onerror = null;
+         recognitionRef.current.onend = null;
+         recognitionRef.current.stop();
       } catch(e){}
-      mediaStreamRef.current = null;
+      recognitionRef.current = null;
     }
     setIsVoiceRecording(false);
   };
@@ -255,38 +249,16 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Voice recognition is not supported in this browser. Please use Chrome/Edge.");
+      alert("Voice recognition is not supported in this browser. Please use Chrome/Edge/Safari.");
       return;
-    }
-
-    // Try starting MediaRecorder/getUserMedia for ambient preview fallback.
-    // In iframes or restricted environments, getUserMedia can fail even if SpeechRecognition is allowed.
-    // Hence, this check is entirely non-blocking!
-    try {
-       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          mediaStreamRef.current = stream;
-          const mediaRecorder = new MediaRecorder(stream);
-          audioChunksRef.current = [];
-          mediaRecorder.ondataavailable = (e) => {
-             if (e.data.size > 0) audioChunksRef.current.push(e.data);
-          };
-          mediaRecorderRef.current = mediaRecorder;
-          mediaRecorder.start();
-       }
-    } catch (e: any) {
-       console.warn("Optional MediaRecorder microphone stream failed, falling back to Web Speech API:", e);
     }
 
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
     recognition.continuous = true;
     recognition.interimResults = true;
+    recognition.lang = 'en-US'; // Explicitly set default language to support mobile Safari
     
-
-
-    
-
 
     recognition.onstart = () => {
        setIsVoiceRecording(true);
@@ -316,7 +288,13 @@ export const JournalView: React.FC<JournalViewProps> = ({
                baseTranscriptRef.current += ' ';
            }
            setTimeout(() => {
-              if (!userStoppedRecordingRef.current) recognition.start();
+              if (!userStoppedRecordingRef.current) {
+                 try {
+                     recognition.start();
+                 } catch(e) {
+                     console.warn("Could not automatically resume voice logging:", e);
+                 }
+              }
            }, 1000);
         } else {
            stopVoiceAndTracks();
@@ -335,15 +313,11 @@ export const JournalView: React.FC<JournalViewProps> = ({
      };
 
     recognitionRef.current = recognition;
-    recognition.start();
-  };
-
-  const saveAudioAsBase64 = async (blob: Blob): Promise<string> => {
-     return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-     });
+    try {
+       recognition.start();
+    } catch(err) {
+       console.error("Critical SpeechRecognition start failure:", err);
+    }
   };
 
   const handleExecuteOmniCommand = async () => {
@@ -359,52 +333,35 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
      setIsProcessingVoice(true);
      try {
-        let b64Audio = "";
-        
-        // Wait a brief context frame for any trailing audio bytes
-        await new Promise(resolve => setTimeout(resolve, 310));
-        
-        if (audioChunksRef.current.length > 0) {
-           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-           b64Audio = await saveAudioAsBase64(audioBlob);
-        }
-
-
-
         const res = await fetch('/api/omni-command', {
            method: 'POST',
            headers: { 'Content-Type': 'application/json' },
            body: JSON.stringify({
               text: finalText,
-              today: date,
               stateContext: {
-                  categories: state.categories,
-                  goals: state.financeGoals?.map(g => g.title) || [],
-                  projects: state.projects?.map(p => p.title) || [],
-                  items: state.items || {},
-                  journalPrompts: state.journalPrompts || []
-              }
+                 categories: state.categories,
+                 items: state.items,
+                 journalPrompts: state.journalPrompts
+              },
+              today: new Date().toISOString()
            })
         });
         
-        if (!res.ok) throw new Error("Unified Omni Engine failed mapping actions");
-        
+        if (!res.ok) throw new Error("Omni Engine failed mapping actions");
         const data = await res.json();
         
         setOmniModal({ 
            isOpen: true, 
-           data,
-           pendingAudio: b64Audio || undefined,
+           data: data,
            pendingTranscript: finalText
         });
 
         setAccumulatedTranscript('');
         baseTranscriptRef.current = '';
         
-        
      } catch(e: any) {
          console.error(e);
-         alert(`Omni Engine failed: ${e.message}`);
+         alert(`Failed to analyze: ${e.message}`);
      } finally {
          setIsProcessingVoice(false);
      }
@@ -909,7 +866,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                   COMBINED AUDIO + KEYBOARD AUTO-LOG CAPABILITIES:
                </div>
                <div>
-                  • <strong className="text-[#ff00a0]">Voice Capture:</strong> Speaking records a local audio clip connected directly to today's journal!
+                  • <strong className="text-[#ff00a0]">Voice Capture:</strong> Save transcribing text log entries dynamically under the Voice Auto-Logs journal!
                </div>
                <div>
                   • <strong className="text-emerald-400">Habit Mapping:</strong> e.g., <em className="text-slate-300">"marked workout as done with 15 reps"</em> completes trackers.
@@ -972,27 +929,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
             </div>
           </div>
 
-          {/* Saved Audio Recording right below OmniLife Auto-Log Console */}
-          {(entry as any).audioLog && (
-            <div className="bg-[#111120] border border-[#ff00a0]/30 rounded-2xl p-4 shadow-[0_0_15px_rgba(255,0,160,0.05)] space-y-3 animate-fadeIn relative z-20">
-              <div className="flex items-center gap-2 border-b border-[#201030] pb-2">
-                <Mic size={14} className="text-[#ff00a0]" />
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-300 font-mono">
-                  Saved Voice Auto-Log Audio Track
-                </h3>
-              </div>
-              <div className="bg-[#070710] p-2 rounded-xl border border-[#1e1e38]">
-                <audio 
-                  controls 
-                  src={(entry as any).audioLog} 
-                  className="w-full h-9 rounded-lg opacity-90" 
-                />
-              </div>
-              <p className="text-[9px] font-mono text-slate-500 leading-relaxed">
-                // this custom recording is linked to today's active journal log for audio playback and reference
-              </p>
-            </div>
-          )}
+          {/* Saved Audio Recording list has been removed because audioTracks function was removed */}
 
           {/* Dynamic Prompts / Custom Headings */}
           <div className="bg-[#111120] border border-[#2a2a50] rounded-2xl p-5 space-y-4">
@@ -1082,14 +1019,36 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 const textVal = entry.sections[p.id] || '';
                 return (
                   <div key={p.id} className="space-y-1.5">
-                    <label className="text-[10px] font-black tracking-widest text-[#ff6b1a] uppercase block font-mono">
-                      {p.label}
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black tracking-widest text-[#ff6b1a] uppercase block font-mono">
+                        {p.label}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          const cleanVal = textVal.trim();
+                          const newVal = cleanVal ? `[${ts}] ${cleanVal}` : `[${ts}] `;
+                          handleSectionChange(p.id, newVal);
+                        }}
+                        className="text-[9px] text-[#ff6b1a]/70 hover:text-[#ff6b1a] font-mono hover:underline cursor-pointer flex items-center gap-1 select-none"
+                        title="Click to stamp this entry with the current time"
+                      >
+                        🕒 Timestamp
+                      </button>
+                    </div>
                     <textarea
                       className="w-full min-h-[95px] bg-[#0d0d1a]/80 border border-[#2a2a50] rounded-xl px-3.5 py-2.5 text-xs text-slate-200 placeholder-zinc-600 focus:placeholder-zinc-700 leading-relaxed focus:outline-none focus:border-indigo-550 focus:border-[#ff6b1a] transition-all"
                       placeholder={isTomorrow ? p.placeholder.replace(/\btoday\b/gi, match => match === 'Today' ? 'Tomorrow' : 'tomorrow') : p.placeholder}
                       value={textVal}
                       onChange={(e) => handleSectionChange(p.id, e.target.value)}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val && !/^\[\d{1,2}:\d{2}/.test(val)) {
+                          const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          handleSectionChange(p.id, `[${ts}] ${val}`);
+                        }
+                      }}
                     />
                   </div>
                 );
@@ -1797,7 +1756,32 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 );
               })}
 
-              {aiActionsModal.actions.length === 0 && (
+              {aiActionsModal.pendingTranscript && (
+                <div className="p-4 bg-[#0a2030]/40 border border-[#00ff88]/30 rounded-xl space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/30 text-[8.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full font-mono">
+                      🎙️ VOICE JOURNAL LOG
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-300 font-mono space-y-2">
+                    <p className="text-[10px] text-slate-400">
+                      Audio and transcription text will be recorded under your "Voice Auto-Logs" journal section:
+                    </p>
+                    <textarea
+                      value={aiActionsModal.pendingTranscript}
+                      onChange={(e) => {
+                        setAiActionsModal({
+                          ...aiActionsModal,
+                          pendingTranscript: e.target.value
+                        });
+                      }}
+                      className="w-full min-h-[70px] bg-[#070710] border border-[#1e1e38] rounded-lg p-2 text-[11px] text-slate-200 focus:outline-none focus:border-[#00ff88]/40 font-mono leading-relaxed"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {aiActionsModal.actions.length === 0 && !aiActionsModal.pendingTranscript && (
                 <div className="p-8 text-center text-slate-500 font-mono text-xs border border-dashed border-[#2a2a50] rounded-xl flex flex-col items-center justify-center gap-2">
                    <span>No actions in review deck.</span>
                    <button 
@@ -1810,15 +1794,17 @@ export const JournalView: React.FC<JournalViewProps> = ({
               )}
             </div>
 
-            {aiActionsModal.actions.length > 0 && (
+            {(aiActionsModal.actions.length > 0 || aiActionsModal.pendingTranscript) && (
               <button
                 onClick={() => {
-                  if (onApplyAiLogs) onApplyAiLogs(aiActionsModal.actions);
+                  if (onApplyAiLogs) {
+                     onApplyAiLogs(aiActionsModal.actions, aiActionsModal.pendingAudio, aiActionsModal.pendingTranscript);
+                  }
                   setAiActionsModal({ isOpen: false, actions: [] });
                 }}
                 className="w-full py-3 bg-[#00ff88] hover:bg-emerald-400 text-[#0d0d1a] font-extrabold tracking-widest text-xs rounded-xl uppercase transition cursor-pointer select-none"
               >
-                ✅ INTEGRATE {aiActionsModal.actions.length} ACTIONS SYSTEM-WIDE
+                ✅ INTEGRATE ACTIONS SYSTEM-WIDE
               </button>
             )}
           </div>

@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppState, TrackerCategory, TrackerStatus } from '../types';
 import { fmtShort, todayStr, getWeek } from '../utils/date';
 import { CATS , getCatLabel } from '../utils/storage';
-import { Search, Sliders, MapPin, Wallet, Calendar, Notebook, CheckSquare, CornerDownRight, Tag, Network, Bot } from 'lucide-react';
+import { Search, Sliders, MapPin, Wallet, Calendar, Notebook, CheckSquare, CornerDownRight, Tag, Network, Bot, Mic, MicOff, Loader } from 'lucide-react';
 import * as d3 from 'd3';
-import { synthesizeLocalPriest } from '../utils/priestLocal';
+import { PriestEngine } from '../utils/priestEngine';
 
 interface SearchViewProps {
   state: AppState;
@@ -42,11 +42,156 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const [customEndDate, setCustomEndDate] = useState(todayStr());
   const [isSearchingRag, setIsSearchingRag] = useState(false);
   const [aiAnswer, setAiAnswer] = useState<string>('');
+  const [isNlpMode, setIsNlpMode] = useState(false);
+  const [nlpKeywords, setNlpKeywords] = useState<string[]>([]);
+  const [analysisFlags, setAnalysisFlags] = useState<{ typo?: boolean, hinglish?: boolean, fragment?: boolean, expanded?: string }>({});
+
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const selectedNodeRef = useRef<any>(null);
   const [showMax, setShowMax] = useState<number>(10);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const priestEngineRef = useRef(new PriestEngine());
+
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const userStoppedRef = useRef(false);
+
+  const handleSearchSubmit = async (qText: string = query) => {
+      if (!qText) {
+          alert("Please ask a question or enter a search query.");
+          return;
+      }
+      try {
+          setIsSearchingRag(true);
+          setAiAnswer("Thinking...");
+          setIsNlpMode(true);
+          setAnalysisFlags({});
+          
+          const localRes = await priestEngineRef.current.processQuery(qText, state, (chunk) => {
+              setAiAnswer(chunk);
+          });
+
+          if (!localRes.usedLLM) {
+              setAiAnswer(localRes.answer);
+          }
+
+          if (localRes.analysisObj) {
+              setAnalysisFlags({
+                  typo: localRes.analysisObj.wasTypoFixed,
+                  hinglish: localRes.analysisObj.wasHinglish,
+                  fragment: localRes.analysisObj.wasFragment,
+                  expanded: localRes.analysisObj.normalized,
+              });
+          }
+          
+          if (localRes.queryObj) {
+              const qObj = localRes.queryObj;
+              if (qObj.temporal.start && qObj.temporal.end) {
+                  setRangeFilter('custom');
+                  setCustomStartDate(qObj.temporal.start);
+                  setCustomEndDate(qObj.temporal.end);
+              }
+              
+              if (qObj.domains && qObj.domains.length === 1) {
+                  if (qObj.domains[0] === 'finance') setModuleFilter('finances');
+                  else if (qObj.domains[0] === 'habit') setModuleFilter('daily');
+                  else if (qObj.domains[0] === 'journal') setModuleFilter('journals');
+                  else if (qObj.domains[0] === 'reminder') setModuleFilter('reminders');
+                  else if (qObj.domains[0] === 'goal') setModuleFilter('goals');
+              } else {
+                  setModuleFilter('all');
+              }
+              
+              if (qObj.keywords && qObj.keywords.length > 0) {
+                  setNlpKeywords(qObj.keywords.map((k: string) => k.toLowerCase()));
+              } else {
+                  setNlpKeywords([]);
+              }
+          }
+          
+      } catch (e) {
+          console.error(e);
+          setAiAnswer("Failed to query data.");
+      } finally {
+          setIsSearchingRag(false);
+      }
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch(e){}
+      }
+      setIsListening(false);
+      userStoppedRef.current = true;
+    } else {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("Voice recognition is not supported in this browser. Please use Chrome/Edge.");
+        return;
+      }
+      
+      const startVoice = async () => {
+         try {
+             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                 await navigator.mediaDevices.getUserMedia({ audio: true });
+             }
+         } catch (e) {
+             console.warn("Optional getUserMedia failed, but will still attempt SpeechRecognition:", e);
+         }
+         
+         const recognition = new SpeechRecognition();
+         recognitionRef.current = recognition;
+         recognition.continuous = false;
+         recognition.interimResults = true;
+         
+         let finalTranscript = '';
+         let lastInterim = '';
+         
+         recognition.onstart = () => {
+            setIsListening(true);
+            userStoppedRef.current = false;
+         };
+         
+         recognition.onresult = (event: any) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const t = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += t + ' ';
+                } else {
+                    interim += t;
+                }
+            }
+            lastInterim = interim;
+            setQuery((finalTranscript + interim).trim());
+         };
+         
+         recognition.onend = () => {
+            setIsListening(false);
+            const t = (finalTranscript + lastInterim).trim();
+            if (!userStoppedRef.current && t) {
+                handleSearchSubmit(t);
+            }
+         };
+         
+         recognition.onerror = (e: any) => {
+            console.error("Speech Recognition Error:", e.error || e);
+            setIsListening(false);
+         };
+         
+         try {
+           recognition.start();
+         } catch (e) {
+           console.error("Failed to start voice recognition:", e);
+           setIsListening(false);
+         }
+      };
+      
+      startVoice();
+    }
+  };
 
   const today = todayStr();
   const weekStart = getWeek(today)[0];
@@ -185,10 +330,33 @@ export const SearchView: React.FC<SearchViewProps> = ({
     }
 
     let filtered = allResults;
-    const q = query.toLowerCase().trim();
-
-    if (q) {
-      filtered = filtered.filter(f => f.matchString.includes(q));
+    if (isNlpMode) {
+      if (nlpKeywords && nlpKeywords.length > 0) {
+          // Strict filtering based on AI keywords
+          const kwds = nlpKeywords.map(k => k.toLowerCase().trim()).filter(Boolean);
+          const keywordFiltered = filtered.filter(f => kwds.some(w => f.matchString.includes(w)));
+          if (keywordFiltered.length > 0) {
+              filtered = keywordFiltered;
+          }
+      } else {
+         // fallback to old logic if no keywords from AI
+         const q = query.toLowerCase().trim();
+         if (q) {
+             const stopWords = ['how', 'much', 'did', 'i', 'spend', 'on', 'what', 'was', 'my', 'the', 'a', 'an', 'in', 'of', 'and', 'to', 'for', 'show', 'me', 'list', 'all', 'any', 'get', 'give', 'tell', 'about', 'some'];
+             const words = q.split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w));
+             if (words.length > 0) {
+                const keywordFiltered = filtered.filter(f => words.some(w => f.matchString.includes(w)));
+                if (keywordFiltered.length > 0) {
+                   filtered = keywordFiltered;
+                }
+             }
+         }
+      }
+    } else {
+      const q = query.toLowerCase().trim();
+      if (q) {
+         filtered = filtered.filter(f => f.matchString.includes(q));
+      }
     }
 
     if (rangeFilter !== 'all') {
@@ -203,7 +371,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
     filtered.sort((a, b) => (b.dateStr || "").localeCompare(a.dateStr || ""));
     return filtered;
-  }, [state, query, moduleFilter, rangeFilter, customStartDate, customEndDate, today, weekStart, monthStart, getDayD, onSetDate, onSetTab, onNavigate]);
+  }, [state, query, isNlpMode, moduleFilter, rangeFilter, customStartDate, customEndDate, today, weekStart, monthStart, getDayD, onSetDate, onSetTab, onNavigate]);
 
   // D3 Knowledge Graph (Rendered AFTER results generation)
   useEffect(() => {
@@ -257,6 +425,53 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
           const sub = r.subtitle || '';
           
+          // Advanced Entity & Proper Name auto-linking (e.g. Aman, John, Math, subjects)
+          const wordSource = `${r.title} ${sub}`.replace(/[.,\/#!$%\^&\*;:{}=\-_\`~()]/g, " ");
+          const words = wordSource.split(/\s+/);
+          const entities = new Set<string>();
+          
+          // Capture key subjects, proper names, or topics even in lowercase
+          const keywordEntities = new Set([
+              "aman", "math", "maths", "science", "physics", "chemistry", "biology", "history",
+              "english", "coding", "programming", "python", "javascript", "react", "exam", "exams",
+              "wallet", "salary", "rent", "budget", "expense", "income", "workout", "gym",
+              "running", "meditation", "sleep", "flight", "hotel", "trip", "travel", "food",
+              "meeting", "interview", "project", "design", "milestone", "deadline"
+          ]);
+
+          words.forEach(w => {
+              const cleaned = w.trim();
+              if (cleaned.length >= 3) {
+                  const lower = cleaned.toLowerCase();
+                  const stopwords = new Set(["the", "and", "with", "for", "from", "this", "that", "your", "daily", "weekly", "monthly", "life", "journal", "win", "blocker", "alert", "today", "yesterday", "tomorrow"]);
+                  if (!stopwords.has(lower)) {
+                      if (/^[A-Z]/.test(cleaned) || keywordEntities.has(lower)) {
+                          // Standardize title: Capitalize first character
+                          const titleCase = cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
+                          entities.add(titleCase);
+                      }
+                  }
+              }
+          });
+
+          entities.forEach(ent => {
+              const entLower = ent.toLowerCase();
+              const nodeId = `entity:${entLower}`;
+              if (!nodesMap.has(nodeId)) {
+                  nodesMap.set(nodeId, { 
+                      id: nodeId, 
+                      title: ent, 
+                      group: 'entity', 
+                      radius: 9, 
+                      rawData: { title: ent, type: 'entity', desc: `Entity: ${ent} detected in linked entries.` } 
+                  });
+              }
+              const linkId = `${entryNodeId}-${nodeId}`;
+              if (!linksMap.has(linkId)) {
+                  linksMap.set(linkId, { source: entryNodeId, target: nodeId, value: 1.5 });
+              }
+          });
+
           // Auto-link by exact Tags / Keywords (like Obsidian Tag Nodes)
           const tags = sub.match(/\[([^\]]+)\]/g);
           if (tags) {
@@ -306,22 +521,51 @@ export const SearchView: React.FC<SearchViewProps> = ({
               const activeNodeId = activeNode ? activeNode.id : null;
               
               let connected = new Set();
+              const direct = new Set();
               if (activeNodeId) {
                  connected.add(activeNodeId);
+                 // Level 1: Find everything directly connected (1st degree)
                  links.forEach(l => {
-                     if (l.source.id === activeNodeId) connected.add(l.target.id);
-                     if (l.target.id === activeNodeId) connected.add(l.source.id);
+                     const sId = l.source.id || l.source;
+                     const tId = l.target.id || l.target;
+                     if (sId === activeNodeId) {
+                         direct.add(tId);
+                         connected.add(tId);
+                     }
+                     if (tId === activeNodeId) {
+                         direct.add(sId);
+                         connected.add(sId);
+                     }
+                 });
+                 // Level 2: Interconnected transitive clusters (Obsidian-style 2-ply connectivity)
+                 links.forEach(l => {
+                     const sId = l.source.id || l.source;
+                     const tId = l.target.id || l.target;
+                     if (direct.has(sId)) {
+                         connected.add(tId);
+                     }
+                     if (direct.has(tId)) {
+                         connected.add(sId);
+                     }
                  });
               }
 
               ctx.beginPath();
               links.forEach(d => {
                   if (activeNodeId) {
-                      if (d.source.id === activeNodeId || d.target.id === activeNodeId) {
-                          ctx.strokeStyle = "rgba(0, 255, 136, 0.8)";
-                          ctx.lineWidth = 2;
+                      const sId = d.source.id || d.source;
+                      const tId = d.target.id || d.target;
+                      const isDirect = (sId === activeNodeId || tId === activeNodeId);
+                      const isSubGraph = (connected.has(sId) && connected.has(tId));
+                      
+                      if (isDirect) {
+                          ctx.strokeStyle = "rgba(0, 255, 136, 0.95)"; // Vibrant Neon Green
+                          ctx.lineWidth = 2.5;
+                      } else if (isSubGraph) {
+                          ctx.strokeStyle = "rgba(0, 212, 255, 0.7)";  // Electric Cyan for indirect sub-relations
+                          ctx.lineWidth = 1.5;
                       } else {
-                          ctx.strokeStyle = "rgba(42, 42, 80, 0.1)";
+                          ctx.strokeStyle = "rgba(42, 42, 80, 0.08)";  // Faint background logic lines
                           ctx.lineWidth = 0.5;
                       }
                   } else {
@@ -348,6 +592,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   else if (d.group === 'expedition') ctx.fillStyle = "#ff9900"; // Orange
                   else if (d.group === 'reminder') ctx.fillStyle = "#aa44ff"; // Purple
                   else if (d.group === 'tag') ctx.fillStyle = "#facc15"; // Yellow for tags
+                  else if (d.group === 'entity') ctx.fillStyle = "#ffbb00"; // Bright amber for entity groups
                   else if (d.group === 'date') ctx.fillStyle = "#a1a1aa";
                   else ctx.fillStyle = "#ffffff";
                    
@@ -456,7 +701,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
       if (simulation) simulation.stop();
       window.removeEventListener("resize", () => {});
     };
-  }, [results]);
+  }, [results, selectedNode]);
 
   return (
     <div className="space-y-6 animate-fadeIn pb-10">
@@ -468,7 +713,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
         </h2>
         <p className="text-xs uppercase tracking-widest text-[#a1a1aa] mt-1 font-mono flex items-center gap-2">
            <Search size={14} className="text-[#00ff88]" />
-           NEURAL NETWORK KNOWLEDGE GRAPH & CONVERSATIONAL QUERY
+           NEURAL NETWORK KNOWLEDGE GRAPH & INSTANT SEARCH
         </p>
       </div>
 
@@ -483,19 +728,23 @@ export const SearchView: React.FC<SearchViewProps> = ({
               </div>
               <input 
                 type="text"
-                className="w-full bg-[#0d0d1a] border border-[#2a2a50] hover:border-[#00ff88]/50 focus:border-[#00ff88] rounded-xl px-4 py-4 pl-12 text-sm text-white placeholder-slate-600 focus:outline-none transition shadow-inner font-bold font-mono"
-                placeholder="Query tracker records, finances, expeditions, journals, alerts..."
+                className="w-full bg-[#0d0d1a] border border-[#2a2a50] hover:border-[#00ff88]/50 focus:border-[#00ff88] rounded-xl px-4 py-4 pl-12 pr-12 text-sm text-white placeholder-slate-600 focus:outline-none transition shadow-inner font-bold font-mono"
+                placeholder="Query tracker, finances, expeditions, journals, alerts..."
                 value={query}
                 onChange={(e) => {
                     setQuery(e.target.value);
-                    setAiAnswer(''); // Clear semantic matches when typing
+                    setIsNlpMode(false);
+                    setAiAnswer('');
+                    setAnalysisFlags({});
                 }}
               />
               {query && (
                 <button
                   onClick={() => {
                     setQuery('');
+                    setIsNlpMode(false);
                     setAiAnswer('');
+                    setAnalysisFlags({});
                   }}
                   className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-white font-black"
                 >
@@ -503,94 +752,9 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 </button>
               )}
             </div>
-            
-            <button
-               onClick={async () => {
-                   if (!query) {
-                      alert("Please ask a question or enter a search query.");
-                      return;
-                   }
-                   try {
-                       setIsSearchingRag(true);
-                       
-                       // Construct minimal state summary tracking to send
-                       const stateSummary = {
-                           finances: (state.finances || []).slice(0, 10).map(f => ({ c: f.concept, a: f.amount, d: f.date, cat: f.category })),
-                           journals: Object.keys(state.journals || {}).slice(0, 7).reduce((acc: any, k) => { 
-                               acc[k] = { 
-                                   notes: (state.journals[k].notes || '').substring(0, 200),
-                                   mood: state.journals[k].mood
-                               }; 
-                               return acc; 
-                           }, {}),
-                           daily: Object.keys(state.daily || {}).slice(0, 3).reduce((acc: any, k) => { acc[k] = state.daily[k]; return acc; }, {})
-                       };
-                       
-                       // INSTANT LOCAL INFERENCE (The Priest)
-                       const localRes = synthesizeLocalPriest(query, state, todayStr());
-                       setAiAnswer(localRes.answer + " ..."); // indicating thinking
-                       if (localRes.filters) {
-                           if (localRes.filters.module) setModuleFilter(localRes.filters.module as any);
-                           if (localRes.filters.dateStart) {
-                               setRangeFilter('custom');
-                               setCustomStartDate(localRes.filters.dateStart);
-                               setCustomEndDate(localRes.filters.dateEnd || localRes.filters.dateStart);
-                           }
-                       }
-
-                       const response = await fetch('/api/search-life', {
-                           method: 'POST',
-                           headers: { 'Content-Type': 'application/json' },
-                           body: JSON.stringify({ text: query, today: todayStr(), stateSummary })
-                       });
-                       
-                       const data = await response.json();
-                       // We prefer our new advanced local priest output if rate limited, or if there's an error.
-                       if (data.filters && !data.error) {
-                           if (data.filters.module && data.filters.module !== 'all') {
-                               setModuleFilter(data.filters.module);
-                           }
-                           if (data.filters.dateStart && data.filters.dateEnd) {
-                               setRangeFilter('custom');
-                               setCustomStartDate(data.filters.dateStart);
-                               setCustomEndDate(data.filters.dateEnd);
-                           }
-                       }
-                       if (data.answer && !data.error) {
-                           setAiAnswer(data.answer);
-                       } else if (data.error) {
-                           setAiAnswer(localRes.answer); // Fallback to fully loaded local response silently
-                           console.error(data.error);
-                       }
-                   } catch (e) {
-                       console.error(e);
-                       // Cannot run `synthesizeLocalPriest` here again, it's already generated. Just use the original one. 
-                       // I am removing the duplicate call here, but will just use the old fallback message temporarily or recalculate it contextually in the catch block if needed.
-                       // Oh wait, `localRes` is defined inside `try`, so it is scoped.
-                       const localComplete = synthesizeLocalPriest(query, state, todayStr());
-                       setAiAnswer(localComplete.answer); // Fully load local response silently on network failure
-                   } finally {
-                       setIsSearchingRag(false);
-                   }
-               }}
-               disabled={isSearchingRag}
-               className="bg-[#0b103d] border border-cyan-500 text-cyan-400 px-6 rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-cyan-500/20 transition-all flex items-center gap-2 whitespace-nowrap disabled:opacity-50"
-            >
-                <Bot size={14} className={isSearchingRag ? 'animate-bounce' : 'animate-pulse'} />
-                {isSearchingRag ? 'THINKING...' : 'TALK TO DATA'}
-            </button>
         </div>
 
-        {/* AI Answer Banner */}
-        {aiAnswer && (
-           <div className="bg-[#0b103d]/40 border border-cyan-500/30 p-4 rounded-xl flex items-start gap-4 mt-6">
-              <Bot size={24} className="text-cyan-400 mt-1 shrink-0" />
-              <div>
-                  <h4 className="text-cyan-400 font-black text-[10px] uppercase tracking-widest font-mono mb-1 bg-cyan-900/30 inline-block px-2 py-1 rounded">The Priest · Insight Engine</h4>
-                  <p className="text-sm font-medium text-slate-200 leading-relaxed mt-2">{aiAnswer}</p>
-              </div>
-           </div>
-        )}
+
 
         {/* Filter Selection Panel */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-[#2a2a50]/40 pt-4">
@@ -736,96 +900,107 @@ export const SearchView: React.FC<SearchViewProps> = ({
         )}
       </div>
 
-      {/* Interactive D3 Knowledge Graph */}
-      <div className="w-full h-80 md:h-[450px] bg-[#0d0d1a] border border-[#2a2a50] rounded-2xl shadow-inner relative overflow-hidden flex flex-col group mt-8">
-         <div className="absolute top-4 left-4 z-10 flex flex-wrap gap-2 pointer-events-none max-w-full pr-4">
-            <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-2 text-[10px] font-mono border border-[#2a2a50]">
-               <div className="w-2 h-2 rounded-full bg-[#00ff88]" /> Habit/Task
+      {/* Interactive D3 Knowledge Graph & Side Inspector Split-Screen Panel */}
+      <div className="flex flex-col xl:flex-row gap-5 mt-8 items-stretch">
+         {/* Graph Body card */}
+         <div className="flex-grow h-[450px] bg-[#0d0d1a] border border-[#2a2a50] rounded-2xl shadow-inner relative overflow-hidden flex flex-col group min-w-0">
+            <div className="absolute top-4 left-4 z-10 flex flex-wrap gap-2 pointer-events-none max-w-full pr-4">
+               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
+                  <div className="w-2 h-2 rounded-full bg-[#00ff88]" /> Habit/Task
+               </div>
+               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
+                  <div className="w-2 h-2 rounded-full bg-[#ff00a0]" /> Finances
+               </div>
+               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
+                  <div className="w-2 h-2 rounded-full bg-[#00d4ff]" /> Journal/Note
+               </div>
+               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
+                  <div className="w-2 h-2 rounded-full bg-[#ff9900]" /> Expedition
+               </div>
+               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
+                  <div className="w-2 h-2 rounded-full bg-[#aa44ff]" /> Reminder
+               </div>
+               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
+                  <div className="w-2 h-2 rounded-full bg-[#facc15]" /> Tags
+               </div>
+               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
+                  <div className="w-2 h-2 rounded-full bg-[#ffbb00]" /> Entities
+               </div>
+               <div className="hidden sm:flex items-center gap-2 bg-[#111120]/80 text-slate-400 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
+                  (Scroll to Zoom, Drag to Pan)
+               </div>
             </div>
-            <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-2 text-[10px] font-mono border border-[#2a2a50]">
-               <div className="w-2 h-2 rounded-full bg-[#ff00a0]" /> Finances
-            </div>
-            <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-2 text-[10px] font-mono border border-[#2a2a50]">
-               <div className="w-2 h-2 rounded-full bg-[#00d4ff]" /> Journal/Note
-            </div>
-            <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-2 text-[10px] font-mono border border-[#2a2a50]">
-               <div className="w-2 h-2 rounded-full bg-[#ff9900]" /> Expedition
-            </div>
-            <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-2 text-[10px] font-mono border border-[#2a2a50]">
-               <div className="w-2 h-2 rounded-full bg-[#aa44ff]" /> Reminder
-            </div>
-            <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-2 text-[10px] font-mono border border-[#2a2a50]">
-               <div className="w-2 h-2 rounded-full bg-[#facc15]" /> Tags
-            </div>
-            <div className="flex items-center gap-2 bg-[#111120]/80 text-slate-400 rounded p-2 text-[10px] font-mono border border-[#2a2a50]">
-               (Scroll to Zoom, Drag to Pan)
-            </div>
+            
+            <canvas ref={canvasRef} className="w-full h-full cursor-crosshair active:cursor-move" />
          </div>
-         
-         {/* Node Details Overlay */}
-         {selectedNode && (
-            <div className="absolute right-4 top-4 bottom-4 w-72 bg-[#111120]/95 backdrop-blur-md border border-cyan-500/40 rounded-xl p-5 shadow-2xl z-20 overflow-y-auto animate-fade-in text-left flex flex-col">
-               <button 
-                  onClick={() => {
-                     setSelectedNode(null);
-                     selectedNodeRef.current = null;
-                  }} 
-                  className="self-end text-slate-400 hover:text-white pb-2"
-               >
-                  ✕
-               </button>
-               <h4 className="text-cyan-400 font-extrabold uppercase tracking-widest text-[11px] mb-4 border-b border-[#2a2a50] pb-2">
-                 Entity Inspector
-               </h4>
-               
-               <div className="space-y-4">
-                 <div>
-                   <div className="text-[9px] text-slate-500 tracking-wider">TITLE / FOCUS</div>
-                   <div className="text-sm font-bold text-white mt-1 leading-tight">{selectedNode.rawData.title || selectedNode.id}</div>
-                 </div>
-                 
-                 <div>
-                   <div className="text-[9px] text-slate-500 tracking-wider">TYPE</div>
-                   <div className="text-xs font-mono text-cyan-400 mt-1 uppercase bg-cyan-900/30 inline-block px-2 py-1 rounded">
-                     {selectedNode.group}
-                   </div>
-                 </div>
 
-                 {selectedNode.rawData.dateStr && (
-                 <div>
-                   <div className="text-[9px] text-slate-500 tracking-wider">TIMESTMP</div>
-                   <div className="text-xs font-mono text-slate-300 mt-1">{selectedNode.rawData.dateStr}</div>
-                 </div>
-                 )}
-                 
-                 {selectedNode.rawData.desc && (
-                 <div>
-                   <div className="text-[9px] text-slate-500 tracking-wider">EXTRACTED CONTENT</div>
-                   <div className="text-xs text-slate-300 mt-1 whitespace-pre-wrap leading-relaxed">{selectedNode.rawData.desc}</div>
-                 </div>
-                 )}
+         {/* Side Inspector Details - Stays next to the graph so it DOES NOT hide/cover the nodes */}
+         {selectedNode && (
+            <div className="w-full xl:w-80 bg-[#111120]/95 backdrop-blur-md border border-cyan-500/40 rounded-2xl p-5 shadow-2xl relative overflow-y-auto animate-fade-in text-left flex flex-col justify-between shrink-0">
+               <div>
+                  <div className="flex justify-between items-center pb-2 border-b border-[#2a2a50] mb-4">
+                     <h4 className="text-cyan-400 font-extrabold uppercase tracking-widest text-[11px]">
+                       Entity Inspector
+                     </h4>
+                     <button 
+                        onClick={() => {
+                           setSelectedNode(null);
+                           selectedNodeRef.current = null;
+                        }} 
+                        className="text-slate-400 hover:text-white transition"
+                     >
+                        ✕
+                     </button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                     <div>
+                       <div className="text-[9px] text-slate-500 tracking-wider font-bold">TITLE / FOCUS</div>
+                       <div className="text-sm font-bold text-white mt-1 leading-tight">{selectedNode?.rawData?.title || selectedNode?.id}</div>
+                     </div>
+                     
+                     <div>
+                       <div className="text-[9px] text-slate-500 tracking-wider font-bold">TYPE</div>
+                       <div className="text-xs font-mono text-cyan-400 mt-1 uppercase bg-cyan-900/30 inline-block px-2 py-1 rounded">
+                         {selectedNode?.group}
+                       </div>
+                     </div>
+
+                     {selectedNode?.rawData?.dateStr && (
+                     <div>
+                       <div className="text-[9px] text-slate-500 tracking-wider font-bold">TIMESTMP</div>
+                       <div className="text-xs font-mono text-slate-300 mt-1">{selectedNode?.rawData?.dateStr}</div>
+                     </div>
+                     )}
+                     
+                     {selectedNode?.rawData?.desc && (
+                     <div>
+                       <div className="text-[9px] text-slate-500 tracking-wider font-bold">EXTRACTED CONTENT</div>
+                       <div className="text-xs text-slate-300 mt-1 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto pr-1">{selectedNode?.rawData?.desc}</div>
+                     </div>
+                     )}
+                  </div>
                </div>
                
-               <div className="mt-auto pt-6 flex gap-2">
+               <div className="pt-6">
                    <button 
                      onClick={() => {
-                       // Jump to view action
-                       if (selectedNode.rawData.type === 'journal' || selectedNode.rawData.type === 'task') {
-                         onSetDate(selectedNode.rawData.dateStr);
-                         onNavigate(selectedNode.rawData.type === 'journal' ? 'journal' : 'daily');
-                       } else if (selectedNode.rawData.type === 'finance') {
+                       if (selectedNode?.rawData?.type === 'journal' || selectedNode?.rawData?.type === 'task') {
+                         if (selectedNode?.rawData?.dateStr) {
+                           onSetDate(selectedNode.rawData.dateStr);
+                         }
+                         onNavigate(selectedNode?.rawData?.type === 'journal' ? 'journal' : 'daily');
+                       } else if (selectedNode?.rawData?.type === 'finance') {
                          onNavigate('finances');
                        }
                      }}
-                     className="flex-1 bg-cyan-500/10 hover:bg-cyan-500/30 text-cyan-400 text-[10px] font-bold uppercase tracking-widest py-2 rounded-lg border border-cyan-500/30 transition-all"
+                     className="w-full bg-cyan-500/10 hover:bg-cyan-500/30 text-cyan-400 text-[10px] font-bold uppercase tracking-widest py-2 rounded-lg border border-cyan-500/30 transition-all text-center block"
                    >
                      Jump to Context
                    </button>
                </div>
             </div>
          )}
-         
-         <canvas ref={canvasRef} className="w-full h-full cursor-crosshair active:cursor-move" />
       </div>
 
     </div>

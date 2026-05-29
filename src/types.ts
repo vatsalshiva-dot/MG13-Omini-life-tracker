@@ -181,6 +181,7 @@ export interface AppState {
   repsTarget: { [category in TrackerCategory]?: { [item: string]: number } };
   hoursTarget: { [category in TrackerCategory]?: { [item: string]: number } };
   financeBudgets?: { d: number; w: number; m: number; y: number };
+  financeIncomeTargets?: { d: number; w: number; m: number; y: number };
   reminders: Reminder[];
   goals: GoalsState;
   pomoSessions: PomoSession[];
