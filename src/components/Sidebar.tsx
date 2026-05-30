@@ -32,6 +32,7 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
   ExternalLink,
   Check,
   Network
@@ -55,6 +56,8 @@ interface SidebarProps {
   onInstallApp?: () => void;
   activeDate?: string;
   onSaveJournal?: (date: string, updated: any) => void;
+  showSidebar?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -75,6 +78,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onInstallApp,
   activeDate,
   onSaveJournal,
+  showSidebar = true,
+  onToggleCollapse = () => {},
 }) => {
   const profile = state.profile || { name: "", tagline: "" };
 
@@ -251,28 +256,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Bottom export drawers
 
   return (
-    <nav className="w-[210px] min-w-[210px] bg-[#0d0d1a] border-r border-[#111120] flex flex-col h-screen sticky top-0 overflow-y-auto font-semibold scrollbar-none select-none">
+    <nav className={`${showSidebar ? "w-[210px] min-w-[210px]" : "w-0 min-w-0 md:w-0 md:min-w-0 border-r-0 overflow-hidden opacity-0 pointer-events-none"} bg-[#0d0d1a] border-r border-[#111120] flex flex-col h-screen sticky top-0 overflow-visible font-semibold select-none transition-all duration-300 relative`}>
+      {/* Sleek floating handle trigger for desktop collapsible action */}
+      {showSidebar && (
+        <button
+          onClick={onToggleCollapse}
+          className="hidden md:flex absolute top-1/2 -translate-y-1/2 -right-3 z-[100] items-center justify-center w-6 h-10 rounded-full bg-[#0d0d1a] hover:bg-[#ff6b1a]/10 text-slate-400 hover:text-[#ff6b1a] border border-[#2a2a50] hover:border-[#ff6b1a]/60 shadow-[4px_0_15px_rgba(0,0,0,0.6)] hover:shadow-[0_0_15px_rgba(255,107,26,0.3)] transition-all duration-300 cursor-pointer group"
+          title="Collapse Sidebar"
+        >
+          <ChevronLeft size={13} className="group-hover:-translate-x-0.5 transition-transform" />
+        </button>
+      )}
+
       {/* App brand */}
-      <div
-        className="p-4 border-b border-[#111120] cursor-pointer hover:bg-[#111120]/40 transition"
-        onClick={() => onNavigate("dashboard")}
-      >
-        <h1 className="text-sm font-extrabold tracking-wider text-white">
-          OMNILIFE{" "}
-          <span id="brand-accent" className="text-[#ff6b1a]">
-            TRACKER
-          </span>
-        </h1>
-        <p className="text-[7.5px] text-slate-500 uppercase tracking-widest mt-1 font-mono">
-          // BENTO SYSTEM V5.2
-        </p>
+      <div className="p-4 border-b border-[#111120] flex items-center justify-between gap-1 overflow-hidden shrink-0 select-none">
+        <div
+          className="cursor-pointer hover:opacity-85 transition min-w-0 text-left flex-1"
+          onClick={() => onNavigate("dashboard")}
+        >
+          <h1 className="text-sm font-extrabold tracking-wider text-white truncate">
+            OMNILIFE{" "}
+            <span id="brand-accent" className="text-[#ff6b1a]">
+              TRACKER
+            </span>
+          </h1>
+          <p className="text-[7.5px] text-slate-500 uppercase tracking-widest mt-1 font-mono">
+            // BENTO SYSTEM V5.2
+          </p>
+        </div>
+        
+        {/* Toggle option for mobile users who don't have hover handles */}
+        <button
+          onClick={onToggleCollapse}
+          className="md:hidden p-1.5 hover:bg-[#111120] text-slate-400 hover:text-[#ff6b1a] rounded transition duration-200 border border-transparent hover:border-[#2a2a50]/40 cursor-pointer shrink-0"
+          title="Collapse Sidebar"
+        >
+          <ChevronLeft size={16} />
+        </button>
       </div>
 
-      {/* Profile Card */}
-      <div
-        className="flex items-center gap-3 p-3.5 border-b border-[#111120] hover:bg-[#111120]/30 transition cursor-pointer"
-        onClick={() => onNavigate("settings")}
-      >
+      {/* Scrolling body container */}
+      <div className="flex-1 overflow-y-auto scrollbar-none flex flex-col">
+        {/* Profile Card */}
+        <div
+          className="flex items-center gap-3 p-3.5 border-b border-[#111120] hover:bg-[#111120]/30 transition cursor-pointer"
+          onClick={() => onNavigate("settings")}
+        >
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-400 flex items-center justify-center text-xs font-black text-white flex-shrink-0 shadow-lg shadow-indigo-500/10">
           {initials}
         </div>
@@ -362,6 +391,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
         ))}
+      </div>
       </div>
 
       {/* Sync Status Banner */}

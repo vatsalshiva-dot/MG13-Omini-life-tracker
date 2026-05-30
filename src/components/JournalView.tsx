@@ -4,6 +4,7 @@ import { fmtShort, fmtDate, todayStr } from '../utils/date';
 import { CATS, getAllCats, getCatLabel } from '../utils/storage';
 import { PriestEngine } from '../utils/priestEngine';
 import { nlpProcessor, AnalysisResult } from '../lib/ai/NlpProcessor';
+import { TimeCapsuleEngine } from './TimeCapsuleEngine';
 import { 
   Plus, Trash2, Edit3, Settings, Bell, Calendar, CheckSquare, 
   Smile, Zap, Award, ThumbsUp, Tag, PlusCircle, Check, MapPin, Image as ImageIcon, ClipboardCopy, FileImage, Search, Brain, X, Loader, Mic, MicOff, FileText
@@ -158,7 +159,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   // Custom tags state
   const [newTagInput, setNewTagInput] = useState('');
   
-  const [viewState, setViewState] = useState<'editor' | 'timeline'>('editor');
+  const [viewState, setViewState] = useState<'editor' | 'timeline' | 'time_capsule'>('editor');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSketch, setShowSketch] = useState(false);
   const [showLocMenu, setShowLocMenu] = useState(false);
@@ -650,11 +651,12 @@ export const JournalView: React.FC<JournalViewProps> = ({
           <div className="flex items-center gap-3 mt-1.5">
             <select
               value={viewState}
-              onChange={(e) => setViewState(e.target.value as 'editor' | 'timeline')}
+              onChange={(e) => setViewState(e.target.value as 'editor' | 'timeline' | 'time_capsule')}
               className="bg-[#0d0d1a] border border-[#2a2a50] text-[#ff6b1a] rounded-lg px-2 py-1 text-xs font-bold uppercase tracking-widest font-mono focus:outline-none cursor-pointer"
             >
               <option value="editor">Editor (Daily View)</option>
               <option value="timeline">Archive (History & Search)</option>
+              <option value="time_capsule">🕒 Time Capsule Dashboard</option>
             </select>
           </div>
         </div>
@@ -1495,7 +1497,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
         </div>
         </div>
-      ) : (
+      ) : viewState === 'timeline' ? (
         <div className="space-y-6 animate-fadeIn pb-10">
           <div className="bg-[#111120] border border-[#2a2a50] rounded-xl flex items-center px-4 py-3 gap-3">
             <Search size={16} className="text-slate-500" />
@@ -1551,7 +1553,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                         const p = (state as any).journalPrompts.find((pr: any) => pr.id === cId);
                         if (!p || !txt.trim()) return null;
                         return (
-                          <div key={cId}>
+                          <div key={cId} className="space-y-1">
                             <h4 className="text-[9px] font-black uppercase text-slate-400 font-mono tracking-widest mb-1">{p.label}</h4>
                             <p className="text-[11px] text-slate-300 line-clamp-3 leading-relaxed">{txt}</p>
                           </div>
@@ -1568,6 +1570,15 @@ export const JournalView: React.FC<JournalViewProps> = ({
             )}
           </div>
         </div>
+      ) : (
+        <TimeCapsuleEngine
+          state={state}
+          activeDate={today}
+          onSetDate={onSetDate}
+          onNavigate={onNavigate}
+          dayStats={dayStats}
+          onSaveJournal={onSaveJournal}
+        />
       )}
 
       {/* AI AUTO LOG MODAL */}

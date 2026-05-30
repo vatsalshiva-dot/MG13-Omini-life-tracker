@@ -1192,6 +1192,7 @@ import {
   Info,
   ChevronUp,
   ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import { getFileHandle, ghostSyncWrite } from "./utils/ghost";
@@ -2059,9 +2060,9 @@ ${summaryText}
       loadDataIndexedDB().then((idbData) => {
         if (idbData) {
           setAppState(idbData);
-          checkAndTriggerAutoBackup(idbData);
+          checkAndTriggerAutoBackup(idbData, setAppState);
         } else {
-          checkAndTriggerAutoBackup(loaded);
+          checkAndTriggerAutoBackup(loaded, setAppState);
         }
       });
     }
@@ -3255,6 +3256,17 @@ ${summaryText}
   };
 
   const handleImportJSONText = (rawStr: string) => {
+    const confirmImport = window.confirm(
+      "📥 DATABASE SYNCHRONIZATION DETECTED!\n\n" +
+      "You are about to modify your current local database with an incoming off-grid sync payload.\n\n" +
+      "This will merge new tracker inputs, daily habit logs, active financial records, goal milestones, and journal entries from the paired device into your workspace.\n\n" +
+      "Would you like to authorize this incoming database update and overwrite overlapping records?"
+    );
+    if (!confirmImport) {
+      showToast("SYNC CANCELLED BY USER", "nfo");
+      return;
+    }
+
     try {
       const parsed = JSON.parse(rawStr);
         setAppState((prev) => {
@@ -3335,6 +3347,23 @@ ${summaryText}
   };
 
   const handleResetAll = () => {
+    const stage1 = window.confirm(
+      "⚠️ WARNING: HARD RESET REQUESTED ⚠️\n\n" +
+      "This action will permanently delete all your offline-first local database records, " +
+      "including your custom habits, journals, tracker logs, task goals, sketchpads, and financial ledgers.\n\n" +
+      "Your data cannot be recovered unless you have manually downloaded/saved a JSON backup.\n\n" +
+      "Are you sure you want to proceed and wipe everything?"
+    );
+    if (!stage1) return;
+
+    const stage2 = window.confirm(
+      "🚨 SYSTEM WIPING CONFIRMATION 🚨\n\n" +
+      "Are you absolutely positive? All customized fields, streak calculations, " +
+      "reminders, and preferences will be set back to factory stock defaults immediately.\n\n" +
+      "Click OK to confirm deletion, or Cancel to keep your database safely intact."
+    );
+    if (!stage2) return;
+
     localStorage.removeItem("lt_v5");
     const empty = defData();
     setAppState(empty);
@@ -3500,6 +3529,8 @@ ${summaryText}
             date={activeDate}
             dayStats={dayStats}
             getDayD={getDayD}
+            onNavigate={handleNavigate}
+            onSetDate={setActiveDate}
           />
         );
       case "calendar":
@@ -3815,7 +3846,13 @@ ${summaryText}
           />
         );
       case "graph":
-        return <GraphView state={appState} />;
+        return (
+          <GraphView
+            state={appState}
+            onSetDate={setActiveDate}
+            onNavigate={handleNavigate}
+          />
+        );
       case "search":
         return (
           <SearchView
@@ -4043,7 +4080,16 @@ Provide 3-5 exact, natural-language commands based on your Roadmap that I can co
   };
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const [isPipEnabled, setIsPipEnabled] = useState(false);
+
+  const handleCollapseSidebar = () => {
+    if (isMobileNavOpen) {
+      setIsMobileNavOpen(false);
+    } else {
+      setShowSidebar(false);
+    }
+  };
   
   useEffect(() => {
     if (isPiPOpen()) {
@@ -4167,7 +4213,7 @@ Provide 3-5 exact, natural-language commands based on your Roadmap that I can co
 
       {/* 1. Left Sidebar menu */}
       <div
-        className={`fixed md:relative z-[70] md:z-10 h-full transform transition-transform duration-300 ${isMobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+        className={`fixed md:relative z-[70] md:z-10 h-full transform transition-all duration-300 ${isMobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} ${showSidebar ? "w-[210px]" : "w-0 overflow-hidden md:w-0 pointer-events-none md:-translate-x-full"}`}
       >
         <Sidebar
           state={appState}
@@ -4175,6 +4221,8 @@ Provide 3-5 exact, natural-language commands based on your Roadmap that I can co
           activeDate={activeDate}
           onSaveJournal={handleSaveJournal}
           onNavigate={handleSidebarNavigate}
+          showSidebar={showSidebar}
+          onToggleCollapse={handleCollapseSidebar}
           syncCfg={syncCfg}
           isSyncing={isSyncing}
           onExportJSON={handleExportJSON}
@@ -4204,6 +4252,16 @@ Provide 3-5 exact, natural-language commands based on your Roadmap that I can co
 
       {/* 2. Main Desk space */}
       <div className="flex-1 flex flex-col h-full overflow-hidden relative z-[20]">
+        {/* Floating Sidebar Re-open trigger for desktop */}
+        {!showSidebar && (
+          <button
+            onClick={() => setShowSidebar(true)}
+            className="hidden md:flex fixed top-1/2 -translate-y-1/2 left-0 z-[100] items-center justify-center w-6 h-10 rounded-r-full bg-[#0d0d1a] hover:bg-[#ff6b1a]/10 text-slate-400 hover:text-[#ff6b1a] border-t border-b border-r border-[#2a2a50] hover:border-[#ff6b1a]/60 shadow-[4px_0_15px_rgba(0,0,0,0.6)] hover:shadow-[0_0_15px_rgba(255,107,26,0.3)] transition-all duration-300 cursor-pointer group"
+            title="Expand Sidebar"
+          >
+            <ChevronRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        )}
         {/* Mobile Header Box */}
         <div className="md:hidden flex items-center justify-between p-4 border-b border-[#111120] bg-[#0d0d1a] relative z-40 shrink-0">
           <button
@@ -4228,14 +4286,14 @@ Provide 3-5 exact, natural-language commands based on your Roadmap that I can co
           {viewHistory.length > 0 && (
             <button
               onClick={goBackView}
-              className="fixed bottom-6 left-6 md:left-[260px] z-50 p-3 bg-[#111120] border border-[#2a2a50] hover:border-[#00ff88] hover:bg-[#00ff88]/10 text-[#00ff88] rounded-full shadow-[0_4px_20px_rgba(0,255,136,0.15)] transition-all cursor-pointer group"
+              className={`fixed bottom-6 z-50 p-3 bg-[#111120] border border-[#2a2a50] hover:border-[#00ff88] hover:bg-[#00ff88]/10 text-[#00ff88] rounded-full shadow-[0_4px_20px_rgba(0,255,136,0.15)] transition-all cursor-pointer group left-6 ${showSidebar ? "md:left-[260px]" : "md:left-6"}`}
               title="Go Back"
             >
               <ChevronLeft size={18} className="group-hover:-translate-x-0.5 transition-transform" />
             </button>
           )}
 
-          <div className="max-w-[1000px] mx-auto min-h-full flex flex-col pb-8">
+          <div className={`${activeView === "graph" ? "max-w-none w-full" : "max-w-[1000px] mx-auto"} min-h-full flex flex-col pb-8`}>
             {/* ↩ Dynamic Navigation Back Button */}
             {viewHistory.length > 0 && (
               <div className="mb-4">
@@ -4275,7 +4333,7 @@ Provide 3-5 exact, natural-language commands based on your Roadmap that I can co
       {/* 3. Global Toasts chimes notifications */}
       {toast && (
         <div
-          className={`fixed bottom-4 left-4 md:left-[240px] z-[110] px-5 py-3 rounded-xl border flex flex-col gap-2 tracking-widest uppercase transition-all duration-300 font-mono text-xs font-black shadow-[0_10px_30px_rgba(0,0,0,0.6)] border-l-4 animate-slide-in-left backdrop-blur-md ${
+          className={`fixed bottom-4 z-[110] px-5 py-3 rounded-xl border flex flex-col gap-2 tracking-widest uppercase transition-all duration-300 font-mono text-xs font-black shadow-[0_10px_30px_rgba(0,0,0,0.6)] border-l-4 animate-slide-in-left backdrop-blur-md left-4 ${showSidebar ? "md:left-[240px]" : "md:left-4"} ${
             toast.type === "ok"
               ? "bg-[#0a0f1d]/85 text-emerald-400 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.25)]"
               : toast.type === "action" 

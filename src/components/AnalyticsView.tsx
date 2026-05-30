@@ -3,6 +3,7 @@ import { AppState, TrackerCategory } from '../types';
 import { getWeek } from '../utils/date';
 import {  CATS , getCatLabel } from '../utils/storage';
 import { TrendingUp, BarChart, Percent, Clock, AlertCircle } from 'lucide-react';
+import { TemporalHelixRibbon } from './TemporalHelixRibbon';
 
 interface AnalyticsViewProps {
   state: AppState;
@@ -19,13 +20,17 @@ interface AnalyticsViewProps {
     pct: number;
   };
   getDayD: (ds: string, cat: TrackerCategory, item: string) => any;
+  onNavigate: (view: string) => void;
+  onSetDate: (date: string) => void;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   state,
   date,
   dayStats,
-  getDayD
+  getDayD,
+  onNavigate,
+  onSetDate
 }) => {
   const [period, setPeriod] = useState<'week' | 'month' | 'year' | 'custom'>('week');
   const [customStart, setCustomStart] = useState<string>('');
@@ -606,6 +611,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Interactive 3D Temporal Helix Ribbon Module */}
+      <TemporalHelixRibbon
+        state={state}
+        dates={dates}
+        getDayD={getDayD}
+        onNavigate={onNavigate}
+        onSetDate={onSetDate}
+      />
     </div>
   );
 };

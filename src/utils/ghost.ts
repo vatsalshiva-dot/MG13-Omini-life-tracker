@@ -50,6 +50,9 @@ getFileHandle().catch(() => {});
 
 // Ensure permission
 export async function verifyPermission(handle: FileSystemFileHandle, readWrite = true) {
+  if (handle as any === 'safari_secured_sandbox') {
+    return true; // Virtual sandbox has implicit permissions
+  }
   const options: any = {};
   if (readWrite) {
     options.mode = 'readwrite';
@@ -71,6 +74,21 @@ export async function ghostSyncWrite(data: AppState) {
     const handle = await getFileHandle();
     if (!handle) return false;
     
+    if (handle as any === 'safari_secured_sandbox') {
+      const payload = JSON.stringify(data, null, 2);
+      localStorage.setItem('ghost_sync_safari_db_payload', payload);
+      try {
+        const root = await navigator.storage.getDirectory();
+        const fileHandle = await root.getFileHandle("life_tracker_ghost_sync.json", { create: true });
+        const accessHandle = await fileHandle.createWritable();
+        await accessHandle.write(payload);
+        await accessHandle.close();
+      } catch (opfsErr) {
+        console.warn("OPFS write failed, fell back to localStorage", opfsErr);
+      }
+      return true;
+    }
+    
     const permitted = await verifyPermission(handle, true);
     if (!permitted) return false;
     
@@ -89,6 +107,20 @@ export async function ghostSyncRead(): Promise<AppState | null> {
     const handle = await getFileHandle();
     if (!handle) return null;
     
+    if (handle as any === 'safari_secured_sandbox') {
+      try {
+        const root = await navigator.storage.getDirectory();
+        const fileHandle = await root.getFileHandle("life_tracker_ghost_sync.json");
+        const file = await fileHandle.getFile();
+        const text = await file.text();
+        return JSON.parse(text);
+      } catch (opfsErr) {
+        const fbText = localStorage.getItem('ghost_sync_safari_db_payload');
+        if (fbText) return JSON.parse(fbText);
+      }
+      return null;
+    }
+    
     // Just ensure read permission
     const permitted = await verifyPermission(handle, false);
     if (!permitted) return null;
@@ -104,6 +136,42 @@ export async function ghostSyncRead(): Promise<AppState | null> {
 
 export async function linkGhostSyncFile() {
   try {
+    if (!('showOpenFilePicker' in window)) {
+      return new Promise<boolean>((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e: any) => {
+          const file = e.target.files?.[0];
+          if (!file) {
+            resolve(false);
+            return;
+          }
+          try {
+            const text = await file.text();
+            JSON.parse(text); // Validate JSON schema
+            
+            // Store a virtual safari/mobile sandboxed secure node
+            const db = await openDB();
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            store.put('safari_secured_sandbox', 'master_handle');
+            
+            // Set memoryHandle
+            memoryHandle = 'safari_secured_sandbox' as any;
+            
+            // Write payload to a fallback LocalStorage/IndexedDB key to load on startup
+            localStorage.setItem('ghost_sync_safari_db_payload', text);
+            resolve(true);
+          } catch (err) {
+            alert("Unable to parse file: Selected file is not a valid JSON database schema.");
+            resolve(false);
+          }
+        };
+        input.click();
+      });
+    }
+
     const [handle] = await (window as any).showOpenFilePicker({
       types: [{
         description: 'JSON Files',
@@ -120,6 +188,28 @@ export async function linkGhostSyncFile() {
 
 export async function createGhostSyncFile() {
   try {
+    if (!('showSaveFilePicker' in window)) {
+      // Create a simulated mobile/Safari safe node in OPFS / IndexedDB
+      const db = await openDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.put('safari_secured_sandbox', 'master_handle');
+      
+      memoryHandle = 'safari_secured_sandbox' as any;
+      
+      // Auto-trigger a download of the baseline empty DB so Safari users have a physical file
+      const emptyPayload = JSON.stringify({ version: "5.0", profile: { name: "", email: "" }, items: {}, pomoSessions: [] }, null, 2);
+      const blob = new Blob([emptyPayload], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'life_tracker_master.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      return true;
+    }
+
     const handle = await (window as any).showSaveFilePicker({
       suggestedName: 'life_tracker_master.json',
       types: [{

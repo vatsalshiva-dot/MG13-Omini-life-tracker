@@ -2,7 +2,11 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppState, TrackerCategory, TrackerStatus } from '../types';
 import { fmtShort, todayStr, getWeek } from '../utils/date';
 import { CATS , getCatLabel } from '../utils/storage';
-import { Search, Sliders, MapPin, Wallet, Calendar, Notebook, CheckSquare, CornerDownRight, Tag, Network, Bot, Mic, MicOff, Loader } from 'lucide-react';
+import { 
+  Search, Sliders, MapPin, Wallet, Calendar, Notebook, CheckSquare, 
+  CornerDownRight, Tag, Network, Bot, Mic, MicOff, Loader, 
+  ZoomIn, ZoomOut, Maximize2, RefreshCw, ChevronRight, Activity, Sparkles, Filter, Compass
+} from 'lucide-react';
 import * as d3 from 'd3';
 import { PriestEngine } from '../utils/priestEngine';
 
@@ -49,6 +53,22 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const selectedNodeRef = useRef<any>(null);
   const [showMax, setShowMax] = useState<number>(10);
+  
+  // Advanced force tuning & active node group filter states
+  const [chargeStrength, setChargeStrength] = useState<number>(-100);
+  const [linkDistance, setLinkDistance] = useState<number>(60);
+  const [collisionBuffer, setCollisionBuffer] = useState<number>(15);
+  const [physicsActive, setPhysicsActive] = useState<boolean>(true);
+  const [showTuningConsole, setShowTuningConsole] = useState<boolean>(false);
+
+  const [showHabitNodes, setShowHabitNodes] = useState<boolean>(true);
+  const [showJournalNodes, setShowJournalNodes] = useState<boolean>(true);
+  const [showFinanceNodes, setShowFinanceNodes] = useState<boolean>(true);
+  const [showExpeditionNodes, setShowExpeditionNodes] = useState<boolean>(true);
+  const [showReminderNodes, setShowReminderNodes] = useState<boolean>(true);
+  const [showTagNodes, setShowTagNodes] = useState<boolean>(true);
+  const [showEntityNodes, setShowEntityNodes] = useState<boolean>(true);
+  const [showDateNodes, setShowDateNodes] = useState<boolean>(true);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const priestEngineRef = useRef(new PriestEngine());
@@ -372,9 +392,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
     filtered.sort((a, b) => (b.dateStr || "").localeCompare(a.dateStr || ""));
     return filtered;
-  }, [state, query, isNlpMode, moduleFilter, rangeFilter, customStartDate, customEndDate, today, weekStart, monthStart, getDayD, onSetDate, onSetTab, onNavigate]);
-
-  // D3 Knowledge Graph (Rendered AFTER results generation)
+  }, [state, query, isNlpMode, moduleFilter, rangeFilter, customStartDate, customEndDate, today, weekStart, monthStart, getDayD, onSetDate, onSetTab, onNavigate]);  // D3 Knowledge Graph (Rendered AFTER results generation with fully customizable Omnilife tuning variables)
   useEffect(() => {
     const reqIdle = window.requestIdleCallback || ((cb: any) => window.setTimeout(cb, 1) as unknown as number);
     const clearIdle = window.cancelIdleCallback || ((id: any) => window.clearTimeout(id));
@@ -390,8 +408,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
       const updateCanvasSize = () => {
         if (!canvas.parentElement) return;
         const rect = canvas.parentElement.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
+        canvas.width = rect.width || canvas.parentElement.clientWidth || 800;
+        canvas.height = rect.height || canvas.parentElement.clientHeight || 550;
       };
       updateCanvasSize();
       
@@ -400,11 +418,10 @@ export const SearchView: React.FC<SearchViewProps> = ({
       
       ctx.clearRect(0, 0, width, height);
 
-      // We will restructure the node building slightly to allow deep interaction.
       const nodesMap = new Map();
       const linksMap = new Map();
       
-      // Node extraction from dynamic search results
+      // Node extraction from dynamic search results with deep group-level filters
       results.forEach((r, idx) => {
           if (idx > 300) return; // limit nodes for performance
 
@@ -414,6 +431,12 @@ export const SearchView: React.FC<SearchViewProps> = ({
                          r.type === 'reminder' ? 'reminder' :
                          r.type === 'expedition' ? 'expedition' : 'custom';
                          
+          if (catGroup === 'tracker' && !showHabitNodes) return;
+          if (catGroup === 'journal' && !showJournalNodes) return;
+          if (catGroup === 'finance' && !showFinanceNodes) return;
+          if (catGroup === 'expedition' && !showExpeditionNodes) return;
+          if (catGroup === 'reminder' && !showReminderNodes) return;
+
           let radius = r.type === 'finance' ? 12 : 
                        r.type === 'journal' ? 15 : 
                        r.type === 'expedition' ? 14 : 
@@ -455,27 +478,29 @@ export const SearchView: React.FC<SearchViewProps> = ({
               }
           });
 
-          entities.forEach(ent => {
-              const entLower = ent.toLowerCase();
-              const nodeId = `entity:${entLower}`;
-              if (!nodesMap.has(nodeId)) {
-                  nodesMap.set(nodeId, { 
-                      id: nodeId, 
-                      title: ent, 
-                      group: 'entity', 
-                      radius: 9, 
-                      rawData: { title: ent, type: 'entity', desc: `Entity: ${ent} detected in linked entries.` } 
-                  });
-              }
-              const linkId = `${entryNodeId}-${nodeId}`;
-              if (!linksMap.has(linkId)) {
-                  linksMap.set(linkId, { source: entryNodeId, target: nodeId, value: 1.5 });
-              }
-          });
+          if (showEntityNodes) {
+              entities.forEach(ent => {
+                  const entLower = ent.toLowerCase();
+                  const nodeId = `entity:${entLower}`;
+                  if (!nodesMap.has(nodeId)) {
+                      nodesMap.set(nodeId, { 
+                          id: nodeId, 
+                          title: ent, 
+                          group: 'entity', 
+                          radius: 9, 
+                          rawData: { title: ent, type: 'entity', desc: `Entity: ${ent} detected in linked entries.` } 
+                      });
+                  }
+                  const linkId = `${entryNodeId}-${nodeId}`;
+                  if (!linksMap.has(linkId)) {
+                      linksMap.set(linkId, { source: entryNodeId, target: nodeId, value: 1.5 });
+                  }
+              });
+          }
 
           // Auto-link by exact Tags / Keywords (like Obsidian Tag Nodes)
           const tags = sub.match(/\[([^\]]+)\]/g);
-          if (tags) {
+          if (showTagNodes && tags) {
               tags.forEach(t => {
                  let tag = t.toLowerCase();
                  if (!nodesMap.has(tag)) {
@@ -489,7 +514,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           }
 
           // Link by Date (Timeline nodes)
-          if (r.dateStr) {
+          if (showDateNodes && r.dateStr) {
              const ds = r.dateStr;
              if (!nodesMap.has(ds)) {
                 nodesMap.set(ds, { id: ds, title: ds, group: 'date', radius: 5, rawData: { title: ds, type: 'date', dateStr: ds, desc: 'Temporal anchor point' } });
@@ -501,127 +526,208 @@ export const SearchView: React.FC<SearchViewProps> = ({
           }
       });
 
-      // Filter out isolated nodes if there are too many
       const nodes = Array.from(nodesMap.values());
-      const links = Array.from(linksMap.values());
+      const links = Array.from(linksMap.values()).map(l => {
+        const sourceNode = nodes.find(n => n.id === l.source);
+        const targetNode = nodes.find(n => n.id === l.target);
+        return {
+          ...l,
+          source: sourceNode || l.source,
+          target: targetNode || l.target
+        };
+      });
+
+      // Maintain selectedRef matching node instances
+      if (selectedNodeRef.current) {
+        const matched = nodes.find(n => n.id === selectedNodeRef.current.id);
+        if (matched) {
+          selectedNodeRef.current = matched;
+          setSelectedNode(matched);
+        } else {
+          selectedNodeRef.current = null;
+          setSelectedNode(null);
+        }
+      }
 
       let transform = d3.zoomIdentity;
 
       simulation = d3.forceSimulation(nodes)
-          .force("charge", d3.forceManyBody().strength(-80).distanceMax(200))
+          .force("charge", d3.forceManyBody().strength(chargeStrength).distanceMax(250))
           .force("center", d3.forceCenter(width / 2, height / 2))
-          .force("link", d3.forceLink(links).id((d: any) => d.id).distance(60).strength(0.3))
-          .force("collide", d3.forceCollide().radius((d: any) => d.radius + 15).iterations(2))
-          .on("tick", () => {
-              ctx.save();
-              ctx.clearRect(0, 0, width, height);
-              ctx.translate(transform.x, transform.y);
-              ctx.scale(transform.k, transform.k);
+          .force("link", d3.forceLink(links).id((d: any) => d.id).distance(linkDistance).strength(0.4))
+          .force("collide", d3.forceCollide().radius((d: any) => d.radius + collisionBuffer).iterations(3));
+
+      if (!physicsActive) {
+         simulation.stop();
+      }
+
+      simulation.on("tick", () => {
+          ctx.save();
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.translate(transform.x, transform.y);
+          ctx.scale(transform.k, transform.k);
+          
+          // Draw dynamic subtle background grid lines
+          ctx.strokeStyle = "rgba(40, 40, 80, 0.08)";
+          ctx.lineWidth = 0.5;
+          const stepSize = 60;
+          const startX = Math.floor((-transform.x) / transform.k / stepSize) * stepSize;
+          const endX = startX + (canvas.width / transform.k) + stepSize * 2;
+          const startY = Math.floor((-transform.y) / transform.k / stepSize) * stepSize;
+          const endY = startY + (canvas.height / transform.k) + stepSize * 2;
+
+          for (let x = startX; x <= endX; x += stepSize) {
+             ctx.beginPath();
+             ctx.moveTo(x, startY);
+             ctx.lineTo(x, endY);
+             ctx.stroke();
+          }
+          for (let y = startY; y <= endY; y += stepSize) {
+             ctx.beginPath();
+             ctx.moveTo(startX, y);
+             ctx.lineTo(endX, y);
+             ctx.stroke();
+          }
+
+          const activeNode = selectedNodeRef.current;
+          const activeNodeId = activeNode ? activeNode.id : null;
+          
+          let connected = new Set();
+          const direct = new Set();
+          if (activeNodeId) {
+             connected.add(activeNodeId);
+             // Level 1 connections
+             links.forEach(l => {
+                 const sId = l.source.id || l.source;
+                 const tId = l.target.id || l.target;
+                 if (sId === activeNodeId) {
+                     direct.add(tId);
+                     connected.add(tId);
+                 }
+                 if (tId === activeNodeId) {
+                     direct.add(sId);
+                     connected.add(sId);
+                 }
+             });
+             // Level 2 transitive clusters
+             links.forEach(l => {
+                 const sId = l.source.id || l.source;
+                 const tId = l.target.id || l.target;
+                 if (direct.has(sId)) connected.add(tId);
+                 if (direct.has(tId)) connected.add(sId);
+             });
+          }
+
+          ctx.beginPath();
+          links.forEach(d => {
+              const sId = d.source.id || d.source;
+              const tId = d.target.id || d.target;
               
-              const activeNode = selectedNodeRef.current;
-              const activeNodeId = activeNode ? activeNode.id : null;
-              
-              let connected = new Set();
-              const direct = new Set();
               if (activeNodeId) {
-                 connected.add(activeNodeId);
-                 // Level 1: Find everything directly connected (1st degree)
-                 links.forEach(l => {
-                     const sId = l.source.id || l.source;
-                     const tId = l.target.id || l.target;
-                     if (sId === activeNodeId) {
-                         direct.add(tId);
-                         connected.add(tId);
-                     }
-                     if (tId === activeNodeId) {
-                         direct.add(sId);
-                         connected.add(sId);
-                     }
-                 });
-                 // Level 2: Interconnected transitive clusters (Obsidian-style 2-ply connectivity)
-                 links.forEach(l => {
-                     const sId = l.source.id || l.source;
-                     const tId = l.target.id || l.target;
-                     if (direct.has(sId)) {
-                         connected.add(tId);
-                     }
-                     if (direct.has(tId)) {
-                         connected.add(sId);
-                     }
-                 });
+                  const isDirect = (sId === activeNodeId || tId === activeNodeId);
+                  const isSubGraph = (connected.has(sId) && connected.has(tId));
+                  
+                  if (isDirect) {
+                      ctx.strokeStyle = "rgba(0, 255, 136, 0.95)"; // Vibrant Neon Green
+                      ctx.lineWidth = 2.5;
+                  } else if (isSubGraph) {
+                      ctx.strokeStyle = "rgba(0, 212, 255, 0.7)";  // Electric Cyan
+                      ctx.lineWidth = 1.5;
+                  } else {
+                      ctx.strokeStyle = "rgba(42, 42, 80, 0.05)";
+                      ctx.lineWidth = 0.5;
+                  }
+              } else {
+                  ctx.strokeStyle = "rgba(42, 42, 80, 0.4)";
+                  ctx.lineWidth = 1;
+              }
+              
+              ctx.beginPath();
+              ctx.moveTo(d.source.x, d.source.y);
+              ctx.lineTo(d.target.x, d.target.y);
+              ctx.stroke();
+          });
+
+          nodes.forEach(d => {
+              const isConnected = activeNodeId ? connected.has(d.id) : true;
+              const isMatched = query ? (d.title && d.title.toLowerCase().includes(query.toLowerCase())) : false;
+              
+              ctx.save();
+              ctx.globalAlpha = isConnected ? 1 : 0.15;
+              
+              // Custom neon highlight filters
+              if (selectedNodeRef.current?.id === d.id) {
+                 ctx.shadowColor = "#00d4ff";
+                 ctx.shadowBlur = 18;
+                 ctx.lineWidth = 3.5;
+                 ctx.strokeStyle = "#ffffff";
+              } else if (isMatched) {
+                 ctx.shadowColor = "#facc15";
+                 ctx.shadowBlur = 15;
+                 ctx.lineWidth = 2.5;
+                 ctx.strokeStyle = "#facc15";
+              } else {
+                 ctx.lineWidth = 1.5;
+                 ctx.strokeStyle = "rgba(10, 10, 25, 0.85)";
               }
 
               ctx.beginPath();
-              links.forEach(d => {
-                  if (activeNodeId) {
-                      const sId = d.source.id || d.source;
-                      const tId = d.target.id || d.target;
-                      const isDirect = (sId === activeNodeId || tId === activeNodeId);
-                      const isSubGraph = (connected.has(sId) && connected.has(tId));
-                      
-                      if (isDirect) {
-                          ctx.strokeStyle = "rgba(0, 255, 136, 0.95)"; // Vibrant Neon Green
-                          ctx.lineWidth = 2.5;
-                      } else if (isSubGraph) {
-                          ctx.strokeStyle = "rgba(0, 212, 255, 0.7)";  // Electric Cyan for indirect sub-relations
-                          ctx.lineWidth = 1.5;
-                      } else {
-                          ctx.strokeStyle = "rgba(42, 42, 80, 0.08)";  // Faint background logic lines
-                          ctx.lineWidth = 0.5;
-                      }
-                  } else {
-                      ctx.strokeStyle = "rgba(42, 42, 80, 0.4)";
-                      ctx.lineWidth = 1;
-                  }
-                  
-                  ctx.beginPath();
-                  ctx.moveTo(d.source.x, d.source.y);
-                  ctx.lineTo(d.target.x, d.target.y);
-                  ctx.stroke();
-              });
-
-              nodes.forEach(d => {
-                  let isConnected = activeNodeId ? connected.has(d.id) : true;
-                  ctx.globalAlpha = isConnected ? 1 : 0.15;
-                  
-                  ctx.beginPath();
-                  ctx.moveTo(d.x + d.radius, d.y);
-                  ctx.arc(d.x, d.y, d.radius, 0, 2 * Math.PI);
-                  if (d.group === 'finance') ctx.fillStyle = "#ff00a0";
-                  else if (d.group === 'journal') ctx.fillStyle = "#00d4ff";
-                  else if (d.group === 'tracker') ctx.fillStyle = "#00ff88"; // standard neon green
-                  else if (d.group === 'expedition') ctx.fillStyle = "#ff9900"; // Orange
-                  else if (d.group === 'reminder') ctx.fillStyle = "#aa44ff"; // Purple
-                  else if (d.group === 'tag') ctx.fillStyle = "#facc15"; // Yellow for tags
-                  else if (d.group === 'entity') ctx.fillStyle = "#ffbb00"; // Bright amber for entity groups
-                  else if (d.group === 'date') ctx.fillStyle = "#a1a1aa";
-                  else ctx.fillStyle = "#ffffff";
-                   
-                  ctx.fill();
-                  ctx.strokeStyle = "#ffffff";
-                  ctx.lineWidth = d.group === 'tag' ? 0 : 1.5;
-                  ctx.stroke();
-                  
-                  if (d.radius > 5 || transform.k > 1.5 || isConnected) {
-                    ctx.fillStyle = d.group === 'tag' ? "#facc15" : "#ffffff";
-                    ctx.font = `bold ${Math.max(10, 10/transform.k)}px 'JetBrains Mono'`;
-                    ctx.textAlign = "center";
-                    let label = d.title || d.id;
-                    if (label.length > 20) label = label.substring(0,20) + '...';
-                    ctx.fillText(label, d.x, d.y + d.radius + 15);
-                  }
-              });
+              ctx.moveTo(d.x + d.radius, d.y);
+              ctx.arc(d.x, d.y, d.radius, 0, 2 * Math.PI);
+              
+              if (d.group === 'finance') ctx.fillStyle = "#ff00a0";
+              else if (d.group === 'journal') ctx.fillStyle = "#00d4ff";
+              else if (d.group === 'tracker') ctx.fillStyle = "#00ff88"; 
+              else if (d.group === 'expedition') ctx.fillStyle = "#ff9900"; 
+              else if (d.group === 'reminder') ctx.fillStyle = "#aa44ff"; 
+              else if (d.group === 'tag') ctx.fillStyle = "#facc15"; 
+              else if (d.group === 'entity') ctx.fillStyle = "#ffbb00"; 
+              else if (d.group === 'date') ctx.fillStyle = "#a1a1aa";
+              else ctx.fillStyle = "#ffffff";
+               
+              ctx.fill();
+              if (d.group !== 'tag') {
+                 ctx.stroke();
+              }
               ctx.restore();
+              
+              const mustShowText = selectedNodeRef.current?.id === d.id || isMatched || d.radius > 5 || transform.k > 1.4 || isConnected;
+              if (mustShowText) {
+                ctx.save();
+                ctx.globalAlpha = isConnected ? 1 : 0.2;
+                const fontSize = Math.max(9, 10 / transform.k);
+                ctx.font = selectedNodeRef.current?.id === d.id || isMatched
+                  ? `bold ${fontSize}px 'JetBrains Mono'`
+                  : `${fontSize}px 'JetBrains Mono'`;
+                
+                ctx.textAlign = "center";
+                let label = d.title || d.id;
+                if (label.length > 20) label = label.substring(0, 20) + '...';
+
+                if (selectedNodeRef.current?.id === d.id || isMatched) {
+                  ctx.fillStyle = "rgba(10, 10, 24, 0.85)";
+                  const textWidth = ctx.measureText(label).width;
+                  ctx.fillRect(d.x - textWidth/2 - 4, d.y + d.radius + 5, textWidth + 8, fontSize + 4);
+                }
+
+                ctx.fillStyle = selectedNodeRef.current?.id === d.id 
+                  ? "#ffffff" 
+                  : isMatched ? "#facc15" : d.group === 'tag' ? "#facc15" : "#e2e8f0";
+                
+                ctx.fillText(label, d.x, d.y + d.radius + 15);
+                ctx.restore();
+              }
           });
+          ctx.restore();
+      });
           
       // Drag Interaction
       d3.select(canvas).call(
         d3.drag<HTMLCanvasElement, any>()
             .subject((e) => {
-               // Adjust for transform
                const invX = transform.invertX(e.x);
                const invY = transform.invertY(e.y);
-               const r = 20; // Hit radius
+               const r = 20; 
                let found = null;
                for (let i = nodes.length - 1; i >= 0; --i) {
                    const node = nodes[i];
@@ -635,23 +741,56 @@ export const SearchView: React.FC<SearchViewProps> = ({
                return found;
             })
             .on("start", (e) => {
-               if (!e.active) simulation.alphaTarget(0.3).restart();
+               if (physicsActive) {
+                  if (!e.active) simulation.alphaTarget(0.3).restart();
+               }
                e.subject.fx = e.subject.x;
                e.subject.fy = e.subject.y;
             })
             .on("drag", (e) => {
-               // Drag works in zoomed space
                e.subject.fx = transform.invertX(e.x);
                e.subject.fy = transform.invertY(e.y);
+               if (!physicsActive) {
+                  simulation.tick();
+                  simulation.alpha(0.01).restart();
+               }
             })
             .on("end", (e) => {
-               if (!e.active) simulation.alphaTarget(0);
-               e.subject.fx = null;
-               e.subject.fy = null;
+               if (physicsActive) {
+                  if (!e.active) simulation.alphaTarget(0);
+                  e.subject.fx = null;
+                  e.subject.fy = null;
+               } else {
+                  e.subject.x = e.subject.fx;
+                  e.subject.y = e.subject.fy;
+               }
             })
       );
       
-      // Zoom and Click Interaction
+      const zoom = d3.zoom<HTMLCanvasElement, any>()
+        .scaleExtent([0.15, 4])
+        .on("zoom", (e) => {
+            transform = e.transform;
+            simulation.alpha(0.05).restart();
+        });
+
+      d3.select(canvas).call(zoom);
+
+      // Setup Zoom Callbacks on element
+      (canvas as any).__zoom_in = () => {
+         d3.select(canvas).transition().duration(250).call(zoom.scaleBy, 1.3);
+      };
+      (canvas as any).__zoom_out = () => {
+         d3.select(canvas).transition().duration(250).call(zoom.scaleBy, 0.7);
+      };
+      (canvas as any).__reset_zoom = () => {
+         d3.select(canvas).transition().duration(350).call(zoom.transform, d3.zoomIdentity);
+         setSelectedNode(null);
+         selectedNodeRef.current = null;
+         simulation.alpha(0.3).restart();
+      };
+
+      // Click Interaction
       d3.select(canvas).on("click", (e) => {
          const invX = transform.invertX(e.offsetX);
          const invY = transform.invertY(e.offsetY);
@@ -660,38 +799,27 @@ export const SearchView: React.FC<SearchViewProps> = ({
              const node = nodes[i];
              const dx = invX - node.x;
              const dy = invY - node.y;
-             if (dx * dx + dy * dy < (node.radius + 10) * (node.radius + 10)) {
+             if (dx * dx + dy * dy < (node.radius + 12) * (node.radius + 12)) {
                  found = node;
                  break;
              }
          }
-         // Important: Need to use a ref or closure careful with React state inside D3
          if (found) {
              setSelectedNode(found);
              selectedNodeRef.current = found;
-             simulation.alpha(0.3).restart();
+             simulation.alpha(0.2).restart();
          } else {
              setSelectedNode(null);
              selectedNodeRef.current = null;
-             simulation.alpha(0.3).restart();
+             simulation.alpha(0.2).restart();
          }
       });
 
-      d3.select(canvas).call(
-          d3.zoom<HTMLCanvasElement, any>()
-            .scaleExtent([0.1, 4])
-            .on("zoom", (e) => {
-                transform = e.transform;
-                simulation.alpha(0.1).restart();
-            })
-      );
-
-      
       const handleResize = () => {
          if (!canvasRef.current || !simulation) return;
          updateCanvasSize();
          simulation.force("center", d3.forceCenter(canvasRef.current.width / 2, canvasRef.current.height / 2));
-         simulation.alpha(1).restart();
+         simulation.alpha(0.8).restart();
       };
       window.addEventListener("resize", handleResize);
 
@@ -702,7 +830,22 @@ export const SearchView: React.FC<SearchViewProps> = ({
       if (simulation) simulation.stop();
       window.removeEventListener("resize", () => {});
     };
-  }, [results, selectedNode]);
+  }, [
+    results, 
+    chargeStrength, 
+    linkDistance, 
+    collisionBuffer, 
+    physicsActive, 
+    query,
+    showHabitNodes,
+    showJournalNodes,
+    showFinanceNodes,
+    showExpeditionNodes,
+    showReminderNodes,
+    showTagNodes,
+    showEntityNodes,
+    showDateNodes
+  ]);
 
   return (
     <div className="space-y-6 animate-fadeIn pb-10">
@@ -901,107 +1044,278 @@ export const SearchView: React.FC<SearchViewProps> = ({
         )}
       </div>
 
-      {/* Interactive D3 Knowledge Graph & Side Inspector Split-Screen Panel */}
-      <div className="flex flex-col xl:flex-row gap-5 mt-8 items-stretch">
-         {/* Graph Body card */}
-         <div className="flex-grow h-[450px] bg-[#0d0d1a] border border-[#2a2a50] rounded-2xl shadow-inner relative overflow-hidden flex flex-col group min-w-0">
-            <div className="absolute top-4 left-4 z-10 flex flex-wrap gap-2 pointer-events-none max-w-full pr-4">
-               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
-                  <div className="w-2 h-2 rounded-full bg-[#00ff88]" /> Habit/Task
-               </div>
-               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
-                  <div className="w-2 h-2 rounded-full bg-[#ff00a0]" /> Finances
-               </div>
-               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
-                  <div className="w-2 h-2 rounded-full bg-[#00d4ff]" /> Journal/Note
-               </div>
-               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
-                  <div className="w-2 h-2 rounded-full bg-[#ff9900]" /> Expedition
-               </div>
-               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
-                  <div className="w-2 h-2 rounded-full bg-[#aa44ff]" /> Reminder
-               </div>
-               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
-                  <div className="w-2 h-2 rounded-full bg-[#facc15]" /> Tags
-               </div>
-               <div className="flex items-center gap-2 bg-[#111120]/80 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
-                  <div className="w-2 h-2 rounded-full bg-[#ffbb00]" /> Entities
-               </div>
-               <div className="hidden sm:flex items-center gap-2 bg-[#111120]/80 text-slate-400 rounded p-1.5 text-[10px] font-mono border border-[#2a2a50]">
-                  (Scroll to Zoom, Drag to Pan)
-               </div>
+      {/* Interactive D3 Knowledge Graph & Operations Center */}
+      <div className="space-y-4 mt-8">
+         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-[#111120]/80 border border-[#2a2a50]/60 rounded-xl p-4">
+            <div>
+               <h4 className="text-sm font-extrabold text-white font-display flex items-center gap-2">
+                  <Network size={16} className="text-[#00ff88] animate-pulse" />
+                  Graph Control Deck
+               </h4>
+               <p className="text-[10px] text-slate-400 font-mono uppercase mt-0.5">Custom layout adjustments, dimensional category filters & forces solver</p>
             </div>
             
-            <canvas ref={canvasRef} className="w-full h-full cursor-crosshair active:cursor-move" />
+            <div className="flex flex-wrap gap-2">
+               <button 
+                  onClick={() => setShowTuningConsole(!showTuningConsole)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition flex items-center gap-1.5 border ${
+                    showTuningConsole 
+                    ? 'bg-[#00ff88]/10 text-[#00ff88] border-[#00ff88]/40 shadow-sm'
+                    : 'bg-[#0d0d1a] text-slate-400 border-[#2a2a50] hover:text-white'
+                  }`}
+               >
+                  <Sliders size={12} />
+                  {showTuningConsole ? "Hide Physics Sliders" : "Tune Physics Force"}
+               </button>
+
+               <button 
+                  onClick={() => setPhysicsActive(!physicsActive)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition flex items-center gap-1.5 border ${
+                    physicsActive 
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                  }`}
+               >
+                  <RefreshCw size={12} className={physicsActive ? 'animate-spin-slow' : ''} />
+                  Physics: {physicsActive ? 'LIVE' : 'LOCKED'}
+               </button>
+            </div>
          </div>
 
-         {/* Side Inspector Details - Stays next to the graph so it DOES NOT hide/cover the nodes */}
-         {selectedNode && (
-            <div className="w-full xl:w-80 bg-[#111120]/95 backdrop-blur-md border border-cyan-500/40 rounded-2xl p-5 shadow-2xl relative overflow-y-auto animate-fade-in text-left flex flex-col justify-between shrink-0">
-               <div>
-                  <div className="flex justify-between items-center pb-2 border-b border-[#2a2a50] mb-4">
-                     <h4 className="text-cyan-400 font-extrabold uppercase tracking-widest text-[11px]">
-                       Entity Inspector
-                     </h4>
-                     <button 
-                        onClick={() => {
-                           setSelectedNode(null);
-                           selectedNodeRef.current = null;
-                        }} 
-                        className="text-slate-400 hover:text-white transition"
-                     >
-                        ✕
-                     </button>
+         {/* Physics Force Tuning Sliders */}
+         {showTuningConsole && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-[#0d0d1a] border border-[#2a2a50] rounded-xl p-5 animate-fadeIn">
+               <div className="space-y-2 text-left">
+                  <div className="flex justify-between items-center text-[10px] font-mono">
+                     <span className="text-slate-400 uppercase font-bold">Node Repulsion (Charge)</span>
+                     <span className="text-cyan-400 font-bold">{chargeStrength}</span>
                   </div>
-                  
-                  <div className="space-y-4">
-                     <div>
-                       <div className="text-[9px] text-slate-500 tracking-wider font-bold">TITLE / FOCUS</div>
-                       <div className="text-sm font-bold text-white mt-1 leading-tight">{selectedNode?.rawData?.title || selectedNode?.id}</div>
-                     </div>
-                     
-                     <div>
-                       <div className="text-[9px] text-slate-500 tracking-wider font-bold">TYPE</div>
-                       <div className="text-xs font-mono text-cyan-400 mt-1 uppercase bg-cyan-900/30 inline-block px-2 py-1 rounded">
-                         {selectedNode?.group}
-                       </div>
-                     </div>
-
-                     {selectedNode?.rawData?.dateStr && (
-                     <div>
-                       <div className="text-[9px] text-slate-500 tracking-wider font-bold">TIMESTMP</div>
-                       <div className="text-xs font-mono text-slate-300 mt-1">{selectedNode?.rawData?.dateStr}</div>
-                     </div>
-                     )}
-                     
-                     {selectedNode?.rawData?.desc && (
-                     <div>
-                       <div className="text-[9px] text-slate-500 tracking-wider font-bold">EXTRACTED CONTENT</div>
-                       <div className="text-xs text-slate-300 mt-1 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto pr-1">{selectedNode?.rawData?.desc}</div>
-                     </div>
-                     )}
-                  </div>
+                  <input 
+                     type="range" 
+                     min="-300" 
+                     max="-20" 
+                     value={chargeStrength}
+                     onChange={(e) => setChargeStrength(Number(e.target.value))}
+                     className="w-full accent-cyan-400 bg-slate-800 rounded-lg appearance-none h-1 cursor-pointer"
+                  />
+                  <p className="text-[9px] text-slate-500 font-mono">// Higher negative values push nodes further apart</p>
                </div>
-               
-               <div className="pt-6">
-                   <button 
-                     onClick={() => {
-                       if (selectedNode?.rawData?.type === 'journal' || selectedNode?.rawData?.type === 'task') {
-                         if (selectedNode?.rawData?.dateStr) {
-                           onSetDate(selectedNode.rawData.dateStr);
-                         }
-                         onNavigate(selectedNode?.rawData?.type === 'journal' ? 'journal' : 'daily');
-                       } else if (selectedNode?.rawData?.type === 'finance') {
-                         onNavigate('finances');
-                       }
-                     }}
-                     className="w-full bg-cyan-500/10 hover:bg-cyan-500/30 text-cyan-400 text-[10px] font-bold uppercase tracking-widest py-2 rounded-lg border border-cyan-500/30 transition-all text-center block"
-                   >
-                     Jump to Context
-                   </button>
+
+               <div className="space-y-2 text-left">
+                  <div className="flex justify-between items-center text-[10px] font-mono">
+                     <span className="text-slate-400 uppercase font-bold">Link Tie Distance</span>
+                     <span className="text-cyan-400 font-bold">{linkDistance}px</span>
+                  </div>
+                  <input 
+                     type="range" 
+                     min="30" 
+                     max="180" 
+                     value={linkDistance}
+                     onChange={(e) => setLinkDistance(Number(e.target.value))}
+                     className="w-full accent-cyan-400 bg-slate-800 rounded-lg appearance-none h-1 cursor-pointer"
+                  />
+                  <p className="text-[9px] text-slate-500 font-mono">// Length of connecting logical logic wires</p>
+               </div>
+
+               <div className="space-y-2 text-left">
+                  <div className="flex justify-between items-center text-[10px] font-mono">
+                     <span className="text-slate-400 uppercase font-bold">Collision Safety Buffer</span>
+                     <span className="text-cyan-400 font-bold">{collisionBuffer}px</span>
+                  </div>
+                  <input 
+                     type="range" 
+                     min="5" 
+                     max="40" 
+                     value={collisionBuffer}
+                     onChange={(e) => setCollisionBuffer(Number(e.target.value))}
+                     className="w-full accent-cyan-400 bg-slate-800 rounded-lg appearance-none h-1 cursor-pointer"
+                  />
+                  <p className="text-[9px] text-slate-500 font-mono">// Anti-overlap radius margin protecting nodes</p>
                </div>
             </div>
          )}
+
+         {/* Filter Active Nodes Category Grid Toggles */}
+         <div className="bg-[#111120]/30 border border-[#2a2a50]/40 rounded-xl p-4 text-left">
+            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2.5 flex items-center gap-1">
+               <Filter size={10} /> Active Category Toggles (Show/Hide in Neural Mesh)
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2">
+               {[
+                  { id: 'habits', label: 'Habits/Tasks', active: showHabitNodes, toggle: () => setShowHabitNodes(!showHabitNodes), color: '#00ff88' },
+                  { id: 'journals', label: 'Journals', active: showJournalNodes, toggle: () => setShowJournalNodes(!showJournalNodes), color: '#00d4ff' },
+                  { id: 'finances', label: 'Finances', active: showFinanceNodes, toggle: () => setShowFinanceNodes(!showFinanceNodes), color: '#ff00a0' },
+                  { id: 'expeditions', label: 'Expeditions', active: showExpeditionNodes, toggle: () => setShowExpeditionNodes(!showExpeditionNodes), color: '#ff9900' },
+                  { id: 'reminders', label: 'Alerts', active: showReminderNodes, toggle: () => setShowReminderNodes(!showReminderNodes), color: '#aa44ff' },
+                  { id: 'tags', label: 'Tags', active: showTagNodes, toggle: () => setShowTagNodes(!showTagNodes), color: '#facc15' },
+                  { id: 'entities', label: 'Entities', active: showEntityNodes, toggle: () => setShowEntityNodes(!showEntityNodes), color: '#ffbb00' },
+                  { id: 'dates', label: 'Dates/Hubs', active: showDateNodes, toggle: () => setShowDateNodes(!showDateNodes), color: '#a1a1aa' },
+               ].map(grp => (
+                  <button
+                     key={grp.id}
+                     onClick={grp.toggle}
+                     className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest transition flex items-center justify-between gap-1.5 border ${
+                       grp.active
+                       ? 'bg-[#0d0d1a] border-slate-700/60 text-white'
+                       : 'bg-[#111120]/10 border-[#1a1a30] text-slate-600 line-through'
+                     }`}
+                  >
+                     <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: grp.active ? grp.color : '#2d2d44' }} />
+                        {grp.label}
+                     </div>
+                  </button>
+               ))}
+            </div>
+         </div>
+
+         {/* Split-Screen Canvas with floating controls and Entity Inspector */}
+         <div className="flex flex-col xl:flex-row gap-5 items-stretch">
+            {/* Graph Body card */}
+            <div className="flex-grow h-[500px] bg-[#0d0d1a] border border-[#2a2a50] rounded-2xl shadow-inner relative overflow-hidden flex flex-col group min-w-0">
+               
+               {/* Legend & Help Overlay */}
+               <div className="absolute top-4 left-4 z-10 hidden sm:flex flex-wrap gap-2 pointer-events-none max-w-full pr-4">
+                  <div className="flex items-center gap-1.5 bg-[#111120]/90 text-slate-300 rounded-lg px-2.5 py-1.5 text-[10px] font-mono border border-[#2a2a50]">
+                     <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-[#00ff88]" /> Mesh Active ({results.length} results indexed)
+                  </div>
+               </div>
+
+               {/* Zoom Canvas Toolbar Floating Bottom-Right */}
+               <div className="absolute bottom-4 right-4 z-10 flex gap-1.5 bg-[#0d0d1a]/95 border border-[#2a2a50] p-1.5 rounded-xl shadow-lg backdrop-blur">
+                  <button 
+                     onClick={() => {
+                        if (canvasRef.current && (canvasRef.current as any).__zoom_in) {
+                           (canvasRef.current as any).__zoom_in();
+                        }
+                     }}
+                     title="Zoom In"
+                     className="p-1.5 bg-[#111120] hover:bg-[#00ff88]/10 text-slate-400 hover:text-[#00ff88] rounded-lg border border-[#2a2a50] transition"
+                  >
+                     <ZoomIn size={14} />
+                  </button>
+                  <button 
+                     onClick={() => {
+                        if (canvasRef.current && (canvasRef.current as any).__zoom_out) {
+                           (canvasRef.current as any).__zoom_out();
+                        }
+                     }}
+                     title="Zoom Out"
+                     className="p-1.5 bg-[#111120] hover:bg-[#00ff88]/10 text-slate-400 hover:text-[#00ff88] rounded-lg border border-[#2a2a50] transition"
+                  >
+                     <ZoomOut size={14} />
+                  </button>
+                  <button 
+                     onClick={() => {
+                        if (canvasRef.current && (canvasRef.current as any).__reset_zoom) {
+                           (canvasRef.current as any).__reset_zoom();
+                        }
+                     }}
+                     title="Center View"
+                     className="p-1.5 bg-[#111120] hover:bg-cyan-500/10 text-slate-400 hover:text-cyan-400 rounded-lg border border-[#2a2a50] transition"
+                  >
+                     <Maximize2 size={14} />
+                  </button>
+               </div>
+               
+               <canvas ref={canvasRef} className="w-full h-full cursor-crosshair active:cursor-move" />
+            </div>
+
+            {/* Entity Inspector Side Panel */}
+            {selectedNode && (
+               <div className="w-full xl:w-80 bg-[#111120]/95 backdrop-blur-md border border-cyan-500/40 rounded-2xl p-5 shadow-2xl text-left flex flex-col justify-between shrink-0">
+                  <div className="space-y-4">
+                     <div className="flex justify-between items-center pb-2 border-b border-[#2a2a50]">
+                        <div className="flex items-center gap-1.5">
+                           <Activity size={12} className="text-cyan-400 animate-pulse" />
+                           <h4 className="text-cyan-400 font-extrabold uppercase tracking-widest text-[11px]">
+                             Node Inspector
+                           </h4>
+                        </div>
+                        <button 
+                           onClick={() => {
+                              setSelectedNode(null);
+                              selectedNodeRef.current = null;
+                           }} 
+                           className="text-slate-400 hover:text-white transition"
+                        >
+                           ✕
+                        </button>
+                     </div>
+                     
+                     <div className="space-y-3.5">
+                        <div>
+                          <div className="text-[9px] text-slate-500 tracking-wider font-bold">TITLE / SUBJECT</div>
+                          <div className="text-base font-extrabold text-[#00ff88] mt-1 leading-tight">{selectedNode?.title || selectedNode?.id}</div>
+                        </div>
+                        
+                        <div>
+                          <div className="text-[9px] text-slate-500 tracking-wider font-bold">SEMANTIC CATEGORY</div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className="text-xs font-mono text-cyan-400 uppercase bg-cyan-950/40 border border-cyan-800/40 px-2 py-0.5 rounded">
+                              {selectedNode?.group}
+                            </span>
+                          </div>
+                        </div>
+
+                        {selectedNode?.rawData?.dateStr && (
+                           <div>
+                             <div className="text-[9px] text-slate-500 tracking-wider font-bold">ASSOCIATED TIMELINE</div>
+                             <div className="text-xs font-mono text-slate-300 mt-1">{selectedNode?.rawData?.dateStr}</div>
+                           </div>
+                        )}
+                        
+                        {selectedNode?.rawData?.desc && (
+                           <div>
+                             <div className="text-[9px] text-slate-500 tracking-wider font-bold">EXTRACTED HIGHLIGHTS</div>
+                             <div className="text-xs text-slate-300 mt-1 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto pr-1 border-l-2 border-slate-700 pl-2">{selectedNode?.rawData?.desc}</div>
+                           </div>
+                        )}
+
+                        {selectedNode?.rawData?.subtitle && selectedNode?.rawData?.subtitle !== selectedNode?.rawData?.desc && (
+                           <div>
+                             <div className="text-[9px] text-slate-500 tracking-wider font-bold">CONTENT DETAIL</div>
+                             <div className="text-xs text-slate-400 mt-1 leading-relaxed">{selectedNode?.rawData?.subtitle}</div>
+                           </div>
+                        )}
+                     </div>
+                  </div>
+                  
+                  <div className="pt-6 space-y-2">
+                      <button 
+                        onClick={() => {
+                           const focusText = selectedNode?.title || selectedNode?.id;
+                           // If tag node like "#finance", strip '#' sign if included or keep for natural searching
+                           if (focusText) {
+                              setQuery(focusText);
+                           }
+                        }}
+                        className="w-full bg-[#00ff88]/10 hover:bg-[#00ff88]/20 text-[#00ff88] text-[10px] font-black uppercase tracking-widest py-2 rounded-lg border border-[#00ff88]/30 transition-all text-center flex items-center justify-center gap-1.5"
+                      >
+                        <Search size={12} />
+                        Sync Graph Search text
+                      </button>
+
+                      <button 
+                        onClick={() => {
+                          if (selectedNode?.rawData?.type === 'journal' || selectedNode?.rawData?.type === 'task') {
+                            if (selectedNode?.rawData?.dateStr) {
+                              onSetDate(selectedNode.rawData.dateStr);
+                            }
+                            onNavigate(selectedNode?.rawData?.type === 'journal' ? 'journal' : 'daily');
+                          } else if (selectedNode?.rawData?.type === 'finance') {
+                            onNavigate('finances');
+                          }
+                        }}
+                        className="w-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-[10px] font-black uppercase tracking-widest py-2 rounded-lg border border-cyan-500/30 transition-all text-center flex items-center justify-center gap-1.5 animate-pulse"
+                      >
+                        <Compass size={12} />
+                        Jump to Context
+                      </button>
+                  </div>
+               </div>
+            )}
+         </div>
       </div>
 
     </div>

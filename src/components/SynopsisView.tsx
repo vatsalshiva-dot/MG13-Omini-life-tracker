@@ -289,7 +289,8 @@ export const SynopsisView: React.FC<SynopsisViewProps> = ({
     const eventsText = list.map(rem => {
       const nowStr = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
       
-      const dateParts = rem.dueDate.split('-'); // YYYY-MM-DD
+      const rawDueDate = (typeof rem.dueDate === 'string' && rem.dueDate) ? rem.dueDate : todayStr();
+      const dateParts = rawDueDate.split('-'); // YYYY-MM-DD
       const dateForm = dateParts.join('');
 
       let dtstart = dateForm;

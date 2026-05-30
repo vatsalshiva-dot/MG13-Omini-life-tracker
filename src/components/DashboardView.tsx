@@ -3,6 +3,7 @@ import { AppState, TrackerCategory } from "../types";
 import { fmtDate, fmtShort, getWeek } from "../utils/date";
 import {  CATS, getAllCats , getCatLabel } from "../utils/storage";
 import { DashboardWeather } from "./DashboardWeather";
+import { HarmonographPulse } from "./HarmonographPulse";
 import {
   Play,
   Calendar,
@@ -635,6 +636,14 @@ Please analyze this comprehensive data encompassing my habits, projects, reminde
 
       {/* Climate & Biosphere Station Console */}
       <DashboardWeather />
+
+      {/* Atmospheric Harmonograph Balanced Pulse */}
+      <HarmonographPulse
+        state={state}
+        date={today}
+        getDayD={getDayD}
+        dayStats={dayStats}
+      />
 
       {/* Two Column Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

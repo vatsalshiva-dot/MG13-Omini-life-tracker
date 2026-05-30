@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { AppState, TrackerCategory } from '../types';
 import { MN, fmtShort, fmtDate } from '../utils/date';
 import {  CATS , getCatLabel } from '../utils/storage';
-import { Calendar, Layers, X, ArrowRight } from 'lucide-react';
+import { Calendar, Layers, X, ArrowRight, ChevronDown, ChevronUp, Eye, EyeOff, Sparkles, Sliders, Info } from 'lucide-react';
 
 interface CalendarViewProps {
   state: AppState;
@@ -30,6 +30,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showCategoryMatrices, setShowCategoryMatrices] = useState(true);
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   const handleMonthChange = (offset: number) => {
     let nextMonth = currentMonth + offset;
@@ -182,72 +184,123 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
 
       {/* Category Wise Heatmaps Overlay grids */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {CATS.map((cat) => (
-          <div key={cat.id} className="bg-[#0d0d1a] border border-[#1e1e38] rounded-xl p-4 space-y-3">
-            <div className="flex items-center gap-2 border-b border-[#111120] pb-2 text-slate-300">
-              <Layers size={13} style={{ color: cat.neon }} />
-              <span className="text-xs font-black uppercase tracking-wider" style={{ color: cat.neon }}>
-                {cat.icon} {getCatLabel(state, cat.id)} Grid
-              </span>
-            </div>
-
-            {/* Days labels */}
-            <div className="grid grid-cols-7 gap-1 text-center text-[7px] font-black text-slate-600 tracking-wider">
-              {dayNames.map(d => <div key={d}>{d.slice(0,2)}</div>)}
-            </div>
-
-            {/* Mini matrix grid cells */}
-            <div className="grid grid-cols-7 gap-1">
-              {gridCells.map((cell, idx) => {
-                if (cell.empty) {
-                  return <div key={`empty-${idx}-cat-${cat.id}`} className="aspect-square bg-transparent" />;
-                }
-
-                // Calculate category fraction
-                const items = state.items[cat.id] || [];
-                let doneCount = 0;
-                items.forEach(it => {
-                  const entry = state.daily[cell.dateStr]?.[cat.id]?.[it];
-                  if (entry && entry.status === 'done') doneCount++;
-                });
-
-                const fraction = items.length ? doneCount / items.length : 0;
-                let hLevel = 0;
-                if (fraction > 0) {
-                  hLevel = fraction === 1 ? 5 : Math.ceil(fraction * 4);
-                }
-
-                // Neon backgrounds levels
-                const lightsClasses = [
-                  'bg-[#111120] hover:border-slate-700 hover:scale-105 transition',
-                  'opacity-30 hover:opacity-100 transition hover:scale-105',
-                  'opacity-50 hover:opacity-100 transition hover:scale-105',
-                  'opacity-70 hover:opacity-100 transition hover:scale-105',
-                  'opacity-90 hover:opacity-100 transition hover:scale-105',
-                  'opacity-100 font-extrabold text-black hover:scale-105 hover:border-white transition'
-                ];
-
-                const customStyle: React.CSSProperties = hLevel > 0 ? {
-                  backgroundColor: cat.neon,
-                  color: hLevel === 5 ? '#000' : cat.neon
-                } : {};
-
-                return (
-                  <div
-                    key={`cat-${cat.id}-${cell.dateStr}`}
-                    onClick={() => setSelectedDate(cell.dateStr)}
-                    className={`aspect-square text-[9px] font-bold rounded flex items-center justify-center cursor-pointer border border-transparent border-slate-900/5 select-none ${lightsClasses[hLevel]}`}
-                    style={customStyle}
-                    title={`${cell.dateStr}: ${doneCount}/${items.length} completed`}
-                  >
-                    {cell.dayNum}
-                  </div>
-                );
-              })}
+      <div className="bg-[#0d0d1a]/80 border border-[#1e1e38] rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-[#111120] pb-3">
+          <div className="flex items-center gap-2">
+            <Layers size={14} className="text-[#00ff88]" />
+            <div>
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">Category-Specific Activity Grids</h3>
+              <p className="text-[10px] text-slate-500 font-mono uppercase mt-0.5">Isolated matrix views tracing checked density across specific zones</p>
             </div>
           </div>
-        ))}
+          <button
+            onClick={() => setShowCategoryMatrices(!showCategoryMatrices)}
+            className="flex items-center gap-1.5 px-3 py-1 rounded bg-[#111120] hover:bg-[#ff6b1a]/20 border border-[#2a2a50]/80 hover:border-[#ff6b1a]/50 text-slate-400 hover:text-[#ff6b1a] text-[10px] font-bold uppercase transition font-mono cursor-pointer"
+          >
+            {showCategoryMatrices ? (
+              <>
+                <span>Collapse Matrices</span>
+                <ChevronUp size={12} />
+              </>
+            ) : (
+              <>
+                <span>Expand Matrices ({CATS.length})</span>
+                <ChevronDown size={12} />
+              </>
+            )}
+          </button>
+        </div>
+
+        {showCategoryMatrices && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {CATS.map((cat) => {
+              const isCollapsed = !!collapsedCategories[cat.id];
+              return (
+                <div key={cat.id} className="bg-[#0a0a16] border border-[#1e1e38] rounded-xl p-4 space-y-3 transition">
+                  <div className="flex items-center justify-between border-b border-[#111120] pb-2 text-slate-300">
+                    <div className="flex items-center gap-2">
+                      <Layers size={12} style={{ color: cat.neon }} />
+                      <span className="text-xs font-black uppercase tracking-wider" style={{ color: cat.neon }}>
+                        {cat.icon} {getCatLabel(state, cat.id)} Grid
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setCollapsedCategories(prev => ({
+                          ...prev,
+                          [cat.id]: !prev[cat.id]
+                        }));
+                      }}
+                      className="p-1 rounded hover:bg-[#16162d] text-slate-500 hover:text-slate-300 transition cursor-pointer"
+                      title={isCollapsed ? "Expand Matrix" : "Collapse Matrix"}
+                    >
+                      {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                    </button>
+                  </div>
+
+                  {!isCollapsed && (
+                    <div className="space-y-3">
+                      {/* Days labels */}
+                      <div className="grid grid-cols-7 gap-1 text-center text-[7px] font-black text-slate-600 tracking-wider">
+                        {dayNames.map(d => <div key={d}>{d.slice(0,2)}</div>)}
+                      </div>
+
+                      {/* Mini matrix grid cells */}
+                      <div className="grid grid-cols-7 gap-1">
+                        {gridCells.map((cell, idx) => {
+                          if (cell.empty) {
+                            return <div key={`empty-${idx}-cat-${cat.id}`} className="aspect-square bg-transparent" />;
+                          }
+
+                          // Calculate category fraction
+                          const items = state.items[cat.id] || [];
+                          let doneCount = 0;
+                          items.forEach(it => {
+                            const entry = state.daily[cell.dateStr]?.[cat.id]?.[it];
+                            if (entry && entry.status === 'done') doneCount++;
+                          });
+
+                          const fraction = items.length ? doneCount / items.length : 0;
+                          let hLevel = 0;
+                          if (fraction > 0) {
+                            hLevel = fraction === 1 ? 5 : Math.ceil(fraction * 4);
+                          }
+
+                          // Neon backgrounds levels
+                          const lightsClasses = [
+                            'bg-[#111120] hover:border-slate-700 hover:scale-105 transition',
+                            'opacity-30 hover:opacity-100 transition hover:scale-105',
+                            'opacity-50 hover:opacity-100 transition hover:scale-105',
+                            'opacity-70 hover:opacity-100 transition hover:scale-105',
+                            'opacity-90 hover:opacity-100 transition hover:scale-105',
+                            'opacity-100 font-extrabold text-black hover:scale-105 hover:border-white transition'
+                          ];
+
+                          const customStyle: React.CSSProperties = hLevel > 0 ? {
+                            backgroundColor: cat.neon,
+                            color: hLevel === 5 ? '#000' : cat.neon
+                          } : {};
+
+                          return (
+                            <div
+                              key={`cat-${cat.id}-${cell.dateStr}`}
+                              onClick={() => setSelectedDate(cell.dateStr)}
+                              className={`aspect-square text-[9px] font-bold rounded flex items-center justify-center cursor-pointer border border-transparent border-slate-900/5 select-none ${lightsClasses[hLevel]}`}
+                              style={customStyle}
+                              title={`${cell.dateStr}: ${doneCount}/${items.length} completed`}
+                            >
+                              {cell.dayNum}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Selected Day Modal popup */}

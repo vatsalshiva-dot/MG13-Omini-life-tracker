@@ -151,15 +151,36 @@ export function saveData(data: AppState) {
  * Auto-Backup System 
  * Checks if 7 days have passed, and triggers an automated JSON download backup of the AppState 
  */
-export function checkAndTriggerAutoBackup(data: AppState) {
+export function checkAndTriggerAutoBackup(data: AppState, onSetState?: (updater: (prev: AppState) => AppState) => void) {
   if (typeof window === 'undefined') return;
   const lastBackupStr = localStorage.getItem(BACKUP_TIMESTAMP_KEY);
   const now = Date.now();
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-  if (!lastBackupStr || (now - parseInt(lastBackupStr, 10)) > SEVEN_DAYS_MS) {
+  const hasPastBackup = !!lastBackupStr || !!data.lastAutoBackup;
+  const lastBackupTime = lastBackupStr ? parseInt(lastBackupStr, 10) : (data.lastAutoBackup || 0);
+
+  // If there's no backup timestamp at all (first load on a device), do not trigger backup download immediately
+  if (!hasPastBackup) {
+    localStorage.setItem(BACKUP_TIMESTAMP_KEY, now.toString());
+    if (onSetState) {
+      onSetState(prev => ({ ...prev, lastAutoBackup: now }));
+    } else {
+      data.lastAutoBackup = now;
+      set('omnilife_v5_userdata', data).catch(console.error);
+    }
+    return;
+  }
+
+  if (now - lastBackupTime > SEVEN_DAYS_MS) {
     triggerBackupDownload(data, "AUTO_WEEKLY");
     localStorage.setItem(BACKUP_TIMESTAMP_KEY, now.toString());
+    if (onSetState) {
+      onSetState(prev => ({ ...prev, lastAutoBackup: now }));
+    } else {
+      data.lastAutoBackup = now;
+      set('omnilife_v5_userdata', data).catch(console.error);
+    }
   }
 }
 

@@ -11,8 +11,6 @@ import * as pdfjsLib from 'pdfjs-dist';
 try {
   if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '4.0.379'}/pdf.worker.min.mjs`;
-  } else if (pdfjsLib && (pdfjsLib as any).default && (pdfjsLib as any).default.GlobalWorkerOptions) {
-    (pdfjsLib as any).default.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${(pdfjsLib as any).default.version || '4.0.379'}/pdf.worker.min.mjs`;
   }
 } catch (e) {
   console.error("PDF.js worker setup failed:", e);
